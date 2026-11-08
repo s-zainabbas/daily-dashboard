@@ -153,7 +153,9 @@ export function rollover(s: State, now = new Date()): State {
     : s.journal;
 
   const tasks = [...s.tasks];
-  if (r.carries.trim()) tasks.unshift({ id: uid(), title: r.carries.trim(), done: false, priority: 'med', dueDate: t, createdAt: Date.now() });
+  // A fixed id, so two synced devices rolling over the same day don't both add it.
+  const carryId = `carry-${prev}`;
+  if (r.carries.trim() && !tasks.some((x) => x.id === carryId)) tasks.unshift({ id: carryId, title: r.carries.trim(), done: false, priority: 'med', dueDate: t, createdAt: Date.now() });
   // Keep the done list tidy: forget completed tasks after two weeks.
   const cutoff = Date.now() - 14 * 864e5;
 
@@ -167,12 +169,20 @@ export function rollover(s: State, now = new Date()): State {
   };
 }
 
+/** Google Drive sync settings for this device (see sync/local.ts). */
+export const SYNC_KEY = 'daily-dashboard:drive';
+
+const linkedToDrive = () => !!readJSON<{ account?: unknown }>(SYNC_KEY)?.account;
+
 function initialState(): State {
   if (typeof localStorage === 'undefined' || demoMode) return emptyState();
   const saved = readJSON<State>(STORAGE_KEY);
   const s = saved ? normalize(saved) : migrateLegacy(readJSON) ?? emptyState();
   if (!saved && s.onboarded) migratedFromLegacy = true;
-  return rollover(s);
+  // When synced, wait for the latest data from the cloud before closing out the day,
+  // so a device that was asleep doesn't journal a stale copy of yesterday.
+  // The sync engine closes out the day right after its first sync (or straight away if it can't sync).
+  return linkedToDrive() ? s : rollover(s);
 }
 
 /* ---------- Store ---------- */
@@ -182,6 +192,7 @@ export const demoMode = typeof location !== 'undefined' && new URLSearchParams(l
 export let migratedFromLegacy = false;
 let state: State = initialState();
 const listeners = new Set<() => void>();
+const localChangeListeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saveError: ((e: unknown) => void) | undefined;
 
@@ -204,13 +215,30 @@ export function flush() {
 
 export const getState = () => state;
 
-export function setState(fn: (s: State) => State) {
-  const next = fn(state);
-  if (next === state) return;
+function commit(next: State) {
   state = next;
   listeners.forEach((l) => l());
   clearTimeout(saveTimer);
   saveTimer = setTimeout(persist, 150);
+}
+
+/** Change state from the UI. Cloud sync hears about it and uploads the change. */
+export function setState(fn: (s: State) => State) {
+  const next = fn(state);
+  if (next === state) return;
+  commit(next);
+  localChangeListeners.forEach((l) => l());
+}
+
+/** Apply data that came from the cloud: saved on this device, but not sent back up. */
+export function applyRemote(fn: (s: State) => State) {
+  const next = fn(state);
+  if (next !== state) commit(next);
+}
+
+export function onLocalChange(fn: () => void) {
+  localChangeListeners.add(fn);
+  return () => localChangeListeners.delete(fn);
 }
 
 export function replaceState(next: State) {

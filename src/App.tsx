@@ -12,6 +12,8 @@ import { Schedule } from './components/Schedule';
 import { Stats } from './components/Stats';
 import { Tasks } from './components/Tasks';
 import { TopBar } from './components/TopBar';
+import { DriveDialogs, syncStatus } from './components/DriveSync';
+import { useDriveSync } from './lib/sync/driveSync';
 import { Toasts, toast } from './components/ui';
 import { isTyping, useNow, useResolvedTheme } from './lib/hooks';
 import { actions, demoMode, getState, migratedFromLegacy, onSaveError, useStore } from './lib/store';
@@ -29,6 +31,7 @@ export default function App() {
   const [eventReq, setEventReq] = useState<{ n: number }>({ n: 0 });
   const quickRef = useRef<HTMLInputElement>(null);
   const timer = useTimer();
+  const sync = useDriveSync();
   const now = useNow(60_000);
   const evening = now.getHours() >= 17;
 
@@ -155,7 +158,7 @@ export default function App() {
           </div>
         </main>
         <footer className="footer">
-          <span>Saved on this device · works offline</span>
+          <span>{sync.account ? `Google Drive · ${syncStatus(sync).text.split(' — ')[0]}` : 'Saved on this device · works offline'}</span>
           <div className="links-row">
             <button onClick={() => setPanel('shortcuts')}>Shortcuts</button>
             <button onClick={() => setPanel('journal')}>Journal</button>
@@ -169,6 +172,7 @@ export default function App() {
       <SettingsDrawer open={panel === 'settings'} onClose={close} />
       <ShortcutsDialog open={panel === 'shortcuts'} onClose={close} />
       <Onboarding open={!onboarded} />
+      <DriveDialogs />
       <Toasts />
     </>
   );

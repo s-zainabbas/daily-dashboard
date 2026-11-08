@@ -684,3 +684,59 @@ dialog[open].drawer { display: flex; flex-direction: column; }
   .stat .stat-icon, .stat .ring { display: none; }
   .stat .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* ---------- Google Drive sync ---------- */
+.avatar { position: relative; display: inline-grid; place-items: center; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
+.avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.avatar .sync-dot { position: absolute; right: -1px; bottom: -1px; box-shadow: 0 0 0 2px var(--surface); }
+.sync-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.sync-dot.ok { background: var(--ok); }
+.sync-dot.busy { background: var(--warn); }
+.sync-dot.bad { background: var(--bad); }
+.icon-btn.attention { box-shadow: inset 0 0 0 1.5px var(--warn); }
+.account-row { justify-content: flex-start; gap: 12px; border-bottom: 0; padding-bottom: 4px; }
+.truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-line { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+.sync-line svg { flex: none; }
+.sync-line.bad { color: var(--bad); }
+.sync-sub { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.sync-pitch { margin: 0 0 12px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.sync-pitch code { font-size: 12px; }
+.sync-actions { margin-top: 12px; flex-wrap: wrap; }
+.sync-actions .btn { flex: 1; }
+.google-btn { width: 100%; }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.compare > div { display: grid; gap: 3px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.compare span { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.compare b { font-weight: 550; font-size: 13px; }
+.compare small { color: var(--muted); font-size: 12px; }
+.choices { display: grid; gap: 8px; }
+.choice { display: grid; gap: 3px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); transition: border-color 0.15s, background 0.15s; }
+.choice:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.choice.recommended { border-color: var(--accent-line); background: var(--accent-soft); }
+.choice b { font-weight: 600; font-size: 13.5px; }
+.choice span { color: var(--text-2); font-size: 12.5px; line-height: 1.45; }
+.conflicts { display: grid; gap: 10px; max-height: 50vh; overflow: auto; }
+.conflict { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
+.conflict-head { display: grid; gap: 2px; }
+.conflict-head span { font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.conflict-head b { font-weight: 600; }
+.conflict-note { margin: 0; font-size: 12.5px; color: var(--text-2); }
+.conflict-field { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 12.5px; }
+.conflict-field i { grid-column: 1 / -1; font-style: normal; color: var(--muted); font-size: 12px; }
+.conflict-field div { padding: 8px; border-radius: 8px; background: var(--surface-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+.conflict-field div span { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.versions { display: grid; gap: 6px; max-height: 50vh; overflow: auto; }
+.version { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+.version em { margin-left: 8px; font-style: normal; font-size: 11px; color: var(--accent); font-weight: 600; }
+.version .btn { flex: none; height: 30px; }
+@media (max-width: 480px) { .compare, .conflict-field { grid-template-columns: 1fr; } }
+.sync-modal { max-height: calc(100dvh - 32px); overflow: auto; }
+.sync-modal .modal-body > * { min-width: 0; }
+.sync-modal .modal-foot { flex-wrap: wrap; }
+.bulk { flex-wrap: wrap; gap: 6px; }
+.bulk .btn { flex: 1 1 auto; }
+.conflict { min-width: 0; }
+.conflict .segmented { display: flex; flex-wrap: wrap; }
+.conflict .segmented button { flex: 1 1 auto; justify-content: center; }

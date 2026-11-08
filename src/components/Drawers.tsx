@@ -6,6 +6,8 @@ import { actions, emptyState, getState, replaceState, useStore } from '../lib/st
 import { timerActions } from '../lib/timer';
 import type { Accent, Theme } from '../lib/types';
 import { clearWeatherCache, searchPlaces, type Place } from '../lib/weather';
+import { useDriveSync } from '../lib/sync/driveSync';
+import { DriveSyncSection } from './DriveSync';
 import { MOODS } from './Panels';
 import { Dialog, DialogHead, Empty, Segmented, Switch, toast } from './ui';
 
@@ -128,6 +130,7 @@ function Stepper({ value, min, max, step, onChange, unit }: { value: number; min
 
 export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const s = useStore((st) => st.settings);
+  const synced = !!useDriveSync().account;
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Place[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -172,6 +175,8 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
     <Dialog open={open} onClose={onClose} className="drawer" label="Settings">
       <DialogHead title="Settings" onClose={onClose} />
       <div className="drawer-body">
+        <DriveSyncSection />
+
         <section>
           <h3>You</h3>
           <label className="field">
@@ -302,8 +307,8 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
           <h3>Your data</h3>
           <div className="setting">
             <div>
-              <b>Stored on this device</b>
-              <small>Nothing leaves your browser. Back up to move it elsewhere.</small>
+              <b>{synced ? 'On this device and in your Google Drive' : 'Stored on this device'}</b>
+              <small>{synced ? 'Works offline; syncs when it can. A backup file is handy too.' : 'Nothing leaves your browser unless you connect Google Drive above.'}</small>
             </div>
           </div>
           <div className="row" style={{ marginTop: 6 }}>
@@ -329,7 +334,7 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
             <button
               className="btn ghost danger"
               onClick={() => {
-                if (!confirm('Erase everything on this device? You can undo right after.')) return;
+                if (!confirm(synced ? 'Erase everything? This also erases it from Google Drive and your other devices on their next sync. You can undo right after.' : 'Erase everything on this device? You can undo right after.')) return;
                 const before = getState();
                 replaceState({ ...emptyState(), onboarded: true, settings: before.settings });
                 toast('Everything erased', { label: 'Undo', run: () => replaceState(before) }, 10000);

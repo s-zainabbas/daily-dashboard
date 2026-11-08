@@ -3,6 +3,7 @@ import { BookOpen, Command, MapPin, Moon, Settings as Cog, Sun } from 'lucide-re
 import { greeting, longDate } from '../lib/date';
 import { useNow, useResolvedTheme } from '../lib/hooks';
 import { actions, useStore } from '../lib/store';
+import { SyncButton } from './DriveSync';
 import { cachedWeather, describe, fetchWeather, type Weather } from '../lib/weather';
 
 function isoWeek(d: Date) {
@@ -141,6 +142,7 @@ export function TopBar({ onPalette, onJournal, onSettings }: { onPalette: () => 
           <button className="icon-btn" onClick={onSettings} title="Settings" aria-label="Open settings">
             <Cog size={17} />
           </button>
+          <SyncButton onOpenSettings={onSettings} />
         </div>
       </div>
     </header>
