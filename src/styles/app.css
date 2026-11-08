@@ -497,6 +497,39 @@ kbd {
 }
 .notes-area::placeholder { color: var(--faint); }
 
+/* ---------- Jobs applied ---------- */
+.job-add { display: flex; gap: 8px; }
+.job-add .input { flex: 1; min-width: 0; }
+.job-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.job-search { flex: 1; min-width: 110px; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); color: var(--faint); }
+.job-search:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.job-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font-size: 12.5px; }
+.jobs { list-style: none; margin: 10px -8px 0; padding: 0; display: grid; gap: 2px; }
+.job { display: flex; align-items: center; gap: 2px; padding-right: 6px; border-radius: 10px; transition: background 0.15s; }
+.job:hover, .job:focus-within { background: var(--surface-2); }
+.job-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px; text-align: left; border-radius: 10px; }
+.job-avatar { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 700; }
+.job-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.job-role { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-loading, .job-missing { font-weight: 500; color: var(--muted); }
+.job-missing { font-style: italic; }
+.job-spin { color: var(--muted); margin-right: 4px; }
+.job.closed .job-role { color: var(--muted); }
+.job.closed .job-avatar { background: var(--surface-3); color: var(--muted); }
+.job .icon-btn { flex: none; opacity: 0.55; }
+.job:hover .icon-btn, .job .icon-btn:focus-visible { opacity: 1; }
+.job-more { margin-top: 6px; }
+.job-url { display: flex; gap: 8px; }
+.job-url .input { flex: 1; min-width: 0; }
+.job-url .btn { height: auto; text-decoration: none; }
+.job-desc { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+.job-desc summary { cursor: pointer; font-size: 12px; font-weight: 550; color: var(--text-2); }
+.job-desc p { margin: 10px 0 0; max-height: 260px; overflow: auto; white-space: pre-wrap; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
+
 .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
 .link {
   position: relative; display: flex; align-items: center; gap: 9px; padding: 9px 10px; min-width: 0;

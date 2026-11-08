@@ -3,6 +3,7 @@ import { CommandPalette, type PaletteHandlers } from './components/CommandPalett
 import { Journal, SettingsDrawer, ShortcutsDialog } from './components/Drawers';
 import { Focus, fmtClock } from './components/Focus';
 import { Habits } from './components/Habits';
+import { Jobs } from './components/Jobs';
 import { Onboarding } from './components/Onboarding';
 import { Links, Notes, Projects, Reflection } from './components/Panels';
 import { Priority } from './components/Priority';
@@ -144,6 +145,7 @@ export default function App() {
           <div className="col col-b">
             <Schedule editRequest={eventReq.n ? eventReq : undefined} />
             <Projects />
+            <Jobs />
             <Links />
           </div>
           <div className="col col-c">

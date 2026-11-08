@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { dateKey, today } from './date';
-import type { CalEvent, DayLog, Habit, Project, QuickLink, Settings, State, Task } from './types';
+import type { CalEvent, DayLog, Habit, JobApplication, Project, QuickLink, Settings, State, Task } from './types';
 
 export const STORAGE_KEY = 'daily-dashboard:v2';
 const LEGACY_PREFIX = 'dashboard.';
@@ -32,6 +32,7 @@ export function emptyState(): State {
       { id: uid(), label: 'Calendar', url: 'https://calendar.google.com' },
       { id: uid(), label: 'GitHub', url: 'https://github.com' },
     ],
+    jobs: [],
     notes: '',
     priority: { title: '', done: false },
     reflection: { shipped: '', slipped: '', carries: '' },
@@ -123,6 +124,7 @@ export function normalize(raw: any): State {
     projects: Array.isArray(raw.projects) ? raw.projects : [],
     habits: Array.isArray(raw.habits) ? raw.habits : [],
     links: Array.isArray(raw.links) ? raw.links : base.links,
+    jobs: Array.isArray(raw.jobs) ? raw.jobs : [],
     journal: Array.isArray(raw.journal) ? raw.journal : [],
     focus: raw.focus && typeof raw.focus === 'object' ? raw.focus : {},
     priority: { ...base.priority, ...raw.priority },
@@ -306,6 +308,22 @@ export const actions = {
   },
   removeLink(id: string) {
     patch('links', (ls) => ls.filter((l) => l.id !== id));
+  },
+
+  addJob(j: Omit<JobApplication, 'id' | 'createdAt' | 'status' | 'appliedOn'> & Partial<JobApplication>) {
+    const job: JobApplication = { id: uid(), status: 'applied', appliedOn: today(), createdAt: Date.now(), ...j };
+    patch('jobs', (js) => [job, ...js]);
+    return job;
+  },
+  updateJob(id: string, p: Partial<JobApplication>) {
+    patch('jobs', (js) => js.map((j) => (j.id === id ? { ...j, ...p, id } : j)));
+  },
+  removeJob(id: string) {
+    const js = getState().jobs;
+    const index = js.findIndex((j) => j.id === id);
+    const job = js[index];
+    patch('jobs', (all) => all.filter((j) => j.id !== id));
+    return () => job && patch('jobs', (all) => [...all.slice(0, index), job, ...all.slice(index)]);
   },
 
   setNotes(notes: string) {

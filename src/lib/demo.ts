@@ -47,6 +47,12 @@ export function demoState(name = 'Zain'): State {
     { id: uid(), name: 'Drink 2L water', history: hist('1111011111111'), createdAt: now },
   ];
   s.notes = 'Ideas\n– Weekly “ship log” post for the team\n– Try time-boxing reviews to 30m\n\nRemember: ask Jordan about the conference budget.';
+  s.jobs = [
+    { id: uid(), url: 'https://job-boards.greenhouse.io/acme/jobs/1001', company: 'Acme', role: 'Senior Product Designer', location: 'Remote (US)', status: 'interview', appliedOn: addDays(t, -9), notes: 'Recruiter: Dana. Portfolio review Thursday 2pm.', createdAt: now },
+    { id: uid(), url: 'https://jobs.lever.co/northwind/2002', company: 'Northwind', role: 'Product Designer, Growth', location: 'New York, NY', status: 'applied', appliedOn: addDays(t, -1), createdAt: now },
+    { id: uid(), url: 'https://www.linkedin.com/jobs/view/3003003003/', company: 'Globex', role: 'UX Designer', location: 'Austin, TX', status: 'applied', appliedOn: t, createdAt: now },
+    { id: uid(), url: 'https://jobs.ashbyhq.com/initech/4004', company: 'Initech', role: 'Design Lead', status: 'rejected', appliedOn: addDays(t, -21), createdAt: now },
+  ];
   s.links = [
     { id: uid(), label: 'Gmail', url: 'https://mail.google.com' },
     { id: uid(), label: 'Calendar', url: 'https://calendar.google.com' },

@@ -19,6 +19,7 @@ Offline-first and private: everything is stored in your browser. No account, no 
 | **Focus timer** | Pomodoro based on timestamps, so it stays accurate in background tabs and across reloads. Countdown in the tab title, chime, notification, daily focus log. |
 | **Habits** | 7-day grid with streaks that forgive an unticked "today". |
 | **Projects** | Status, progress and the single next action. |
+| **Jobs applied** | Paste a job link and it's saved with the company, position and location filled in. Track status (applied, interview, offer, rejected), add notes, and keep a copy of the job description in case the posting comes down before your interview. |
 | **End-of-day review → Journal** | Mood, what shipped, what slipped. At midnight the day is saved to a journal with your priority, tasks completed and focus time; "carry to tomorrow" becomes a task. |
 | **Weather** | Local conditions with high/low and rain chance (Open-Meteo, no API key). |
 | **Command menu** | `⌘K` to run any action or complete a task by name. |
@@ -33,7 +34,8 @@ Offline-first and private: everything is stored in your browser. No account, no 
 - No state library: a small external store on `useSyncExternalStore`, with debounced persistence, cross-tab sync and versioned migrations
 - Hand-written CSS design system (tokens, light/dark, container queries, reduced-motion support); Geist + Instrument Serif fonts, bundled for offline use
 - Accessible by default: native `<dialog>` for modals (focus trap, Esc), labelled controls, visible focus rings
-- **Vitest** unit tests for the date logic, natural-language parser, legacy migration and day rollover
+- **Vitest** unit tests for the date logic, natural-language parser, job-link parsing, legacy migration and day rollover
+- Job links are looked up with the public Greenhouse, Lever and Ashby job APIs; other sites (LinkedIn, Indeed, career pages) go through [Microlink](https://microlink.io)'s free link-preview API. Only the job link is sent, nothing else
 - Service worker for offline use; GitHub Actions workflow that tests, builds and deploys to GitHub Pages
 
 ```

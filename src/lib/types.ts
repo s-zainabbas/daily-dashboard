@@ -55,6 +55,22 @@ export interface QuickLink {
   url: string;
 }
 
+export type JobStatus = 'applied' | 'interview' | 'offer' | 'rejected';
+
+export interface JobApplication {
+  id: string;
+  url: string;
+  company: string;
+  role: string;
+  location?: string;
+  status: JobStatus;
+  appliedOn: DateKey;
+  notes?: string;
+  /** Copy of the posting, kept in case it's taken down before an interview. */
+  description?: string;
+  createdAt: number;
+}
+
 export interface Reflection {
   shipped: string;
   slipped: string;
@@ -96,6 +112,7 @@ export interface State {
   projects: Project[];
   habits: Habit[];
   links: QuickLink[];
+  jobs: JobApplication[];
   notes: string;
   priority: { title: string; done: boolean };
   reflection: Reflection;
