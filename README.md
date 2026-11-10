@@ -12,23 +12,28 @@ Offline-first and private: everything is stored in your browser. Optionally conn
 
 | | |
 |---|---|
-| **Sidebar with tabs** | Today, Tasks, Schedule, Projects, Jobs and Notes, with badges for what's waiting. Switch with `1`–`6`; `[` folds it to icons. Becomes a bottom tab bar on phones. **Today fits on one screen** on a laptop: long cards scroll inside themselves. |
+| **Sidebar with tabs** | Today, Tasks, Schedule, Projects, Jobs, Notes, Journal and Insights, with badges for what's waiting. Switch with `1`–`8`; `[` folds it to icons. Becomes a bottom tab bar on phones. **Today fits on one screen** on a laptop: long cards scroll inside themselves. |
 | **Plan my day** | Press `P` for a one-minute morning routine: sort out overdue tasks, pick today's tasks (with your free time from the calendar), set your #1 priority. Undo included. |
+| **Shutdown routine** | Press `S` (or use the evening prompt on Today) to close the day: see what you got done, tick off leftover habits, give unfinished tasks a new home, write what shipped (pre-filled from completed tasks), and set tomorrow's #1, which is waiting for you in the morning. |
 | **Natural-language quick add** | Type `Call Sam tomorrow !high` or `Dentist fri 3-4pm`. A live preview shows what it understood: task or event, date, time, priority. |
 | **Today's #1 priority** | One thing that would make today a win, with a one-click "Focus on it". |
-| **Tasks** | Grouped into Overdue / Today / Upcoming / Anytime / Waiting on others. Priorities, projects, notes, undo on delete. **Checklists**: break a task into steps (paste a list to add several) and tick them from the list. |
-| **Schedule** | Agenda with a "now" line, free-time gaps, a day-at-a-glance bar, and a peek at tomorrow. Browse other days. |
-| **Focus timer** | Pomodoro based on timestamps, so it stays accurate in background tabs and across reloads. Countdown in the tab title, chime, notification, daily focus log. |
-| **Habits** | 7-day grid with streaks that forgive an unticked "today". |
+| **Tasks** | Grouped into Overdue / Today / Upcoming / Anytime / Waiting on others. Priorities, projects, notes, undo on delete. **Checklists** (paste a list to add several steps), **time estimates** (`Write report 2h`), **reminders** (`Call mum remind 3pm`), **snooze** (tomorrow / next week / a date) and **drag to reorder** — dropping a task into Today or Anytime changes its date. |
+| **Schedule** | Day agenda with a "now" line, free-time gaps and a peek at tomorrow, or a **week view**: drag a task onto a time slot to block time for it, drag your events to move them, double-click to add one. |
+| **Focus timer** | Pomodoro based on timestamps, so it stays accurate in background tabs and across reloads. Countdown in the tab title, chime, notification, daily focus log, minutes credited to the task you picked. `Shift+F` for **full-screen focus mode**. |
+| **Habits** | 7-day grid with streaks that forgive an unticked "today". Habits on **chosen days** (Gym Mon/Wed/Fri — streaks skip rest days), **counted habits** (8 glasses of water) and a **90-day heatmap** with success rate and best streak. |
 | **Projects** | Status, progress and the single next action. The Projects tab shows each project with its own task list; tasks added there are linked to it. |
-| **Jobs applied** | Paste a job link and it's saved with the company, position and location filled in. Track status (applied, interview, offer, rejected), add notes, and keep a copy of the job description in case the posting comes down before your interview. |
+| **Jobs applied** | List or **board** (drag between Applied → Interview → Offer → Rejected). **Follow up?** nudges after a week with no news, **interview dates** that show in Schedule with a reminder, contact and salary. |
+| **Job links** | Paste a job link and it's saved with the company, position and location filled in. Track status (applied, interview, offer, rejected), add notes, and keep a copy of the job description in case the posting comes down before your interview. |
+| **Weekly review** | Press `W` (or use the prompt Friday afternoon to Monday morning): see the week's focus, tasks, habits and mood, reflect, and set up to 3 goals that sit on Today all week. |
+| **Insights** | Focus and tasks per day, where your focus went (by task or project), mood, habit success and job applications — for 7, 30 or 90 days, with a "Show numbers" table under every chart. |
+| **Notes** | Multiple notes with pinning and search. Light formatting: `# heading`, `**bold**`, `- list`, `- [ ] checkbox` (tick it in Preview), links. |
 | **End-of-day review → Journal** | Mood, what shipped, what slipped. At midnight the day is saved to a journal with your priority, tasks completed and focus time; "carry to tomorrow" becomes a task. |
 | **Quick links** | Your everyday sites as icons in the top bar. Edit them on the Notes tab. |
 | **Weather** | Local conditions with high/low and rain chance (Open-Meteo, no API key). |
-| **Command menu** | `⌘K` to run any action or complete a task by name. |
-| **Keyboard first** | `/` quick add · `N` task · `E` event · `P` plan my day · `F` focus · `J` journal · `T` theme · `1`–`6` tabs · `?` all shortcuts |
+| **Command menu** | `⌘K` to run any action, or **search everything**: tasks, notes, projects, jobs, events and journal days. |
+| **Keyboard first** | `/` quick add · `N` task · `E` event · `P` plan my day · `S` shut down · `W` weekly review · `F` focus · `⇧F` focus mode · `J` journal · `T` theme · `1`–`8` tabs · `?` all shortcuts |
 | **Themes** | Light, dark or system, with five accent colours. |
-| **Installable PWA** | Works offline; install it to your dock or home screen. |
+| **Installable PWA** | Works offline; install it to your dock or home screen. Long-press the icon for shortcuts: New task, Plan my day, Focus, Shut down. |
 | **Google Drive sync** | Connect your Google account and the dashboard is saved to a hidden app folder in your own Drive. Edits sync a few seconds later; other devices pick them up when they open or come back online. Changes made on two devices are merged, and if the same thing was changed in both places you choose which to keep. Restore any recent version. |
 | **Google Calendar** | Your Google Calendar events show in Schedule, the "Next up" card and the sidebar, next to your own events, in each calendar's colour. Read-only and never copied into your data; click one to open it in Google Calendar. Choose which calendars to show in Settings. |
 | **Repeating tasks** | `Gym every mon wed fri`, `Pay rent monthly`, or set it in the task editor. Ticking one off adds the next; Undo and Skip included. |
@@ -97,6 +102,7 @@ Events from last week to two months ahead are fetched when the dashboard opens, 
 ### How it behaves
 
 - **Sign-in:** Google's recommended browser flow (Google Identity Services, token model). The app gets a short-lived access token (about an hour) limited to its own Drive folder. There's no client secret and no refresh token in the app. Google only issues a new token from a tap, so after an hour sync pauses until you tap **Sync now** (or the avatar in the top bar). Your edits keep saving on the device in the meantime.
+- **Staying signed in:** Google only issues a new token from a click, so when the hour is nearly up the app renews it on your next click anywhere (a Google window may flash for a second). Turn it off under **Settings → Stay signed in**.
 - **When it syncs:** about 3 seconds after you stop editing, when the dashboard opens, when you come back to the tab, when you're back online, and every 5 minutes while it's open. Turn off **Automatic sync** to sync only when you tap **Sync now**.
 - **First connection:** if Drive is empty, this device's data is uploaded. On a new device with no data, the Drive copy is restored. If both have data, you choose: **merge** (recommended), **use Drive's copy**, or **use this device's copy**. Local data is never erased without asking, and a backup is kept with an Undo.
 - **Merging:** each record (task, event, habit…) has a stable ID and a last-changed time, and deletions leave a tombstone for 90 days. The app compares the last synced copy with this device and with Drive. Changes on one side win over unchanged data, so older data never overwrites newer. Changes to different items or different fields are combined. Focus minutes from two devices add up. If the same field was changed on both sides, or something was edited on one device and deleted on another, the app asks you and uploads nothing until you choose.

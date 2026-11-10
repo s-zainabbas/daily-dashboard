@@ -67,12 +67,14 @@ const WHAT: Record<CollectionKey | ValueKey, string> = {
   jobs: 'Job application',
   journal: 'Journal day',
   focus: 'Focus log',
+  pages: 'Note',
   notes: 'Notes',
   priority: 'Today’s #1 priority',
   reflection: 'End-of-day review',
   settings: 'Settings',
   onboarded: 'Setup',
   lastActiveDate: 'Active date',
+  week: 'Weekly goals',
 };
 
 function labelOf(c: CollectionKey, id: string, data: any): string {
@@ -113,7 +115,18 @@ function mergeRecord(
   if (c === 'focus') {
     // Focus minutes from both devices add up.
     const add = (k: string) => (Number(l!.data[k]) || 0) + (Number(r!.data[k]) || 0) - (Number(bd?.[k]) || 0);
-    return keep({ t: Math.max(l!.t, r!.t), data: { ...l!.data, minutes: add('minutes'), sessions: add('sessions') } });
+    // Per-task minutes add up the same way.
+    const li = l!.data.items ?? {};
+    const ri = r!.data.items ?? {};
+    const bi = bd?.items ?? {};
+    const keys = new Set([...Object.keys(li), ...Object.keys(ri)]);
+    const items = Object.fromEntries(
+      [...keys].map((k) => {
+        const minutes = (Number(li[k]?.minutes) || 0) + (Number(ri[k]?.minutes) || 0) - (Number(bi[k]?.minutes) || 0);
+        return [k, { ...(ri[k] ?? {}), ...(li[k] ?? {}), minutes }];
+      }),
+    );
+    return keep({ t: Math.max(l!.t, r!.t), data: { ...l!.data, minutes: add('minutes'), sessions: add('sessions'), ...(keys.size ? { items } : {}) } });
   }
   if (choice === 'both' && c !== 'journal') {
     const copyId = uid();

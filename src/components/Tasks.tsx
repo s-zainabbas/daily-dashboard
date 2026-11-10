@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, CheckCircle2, ChevronDown, Folder, ListChecks, X, Hourglass, ListTodo, Pencil, Play, Plus, Repeat as RepeatIcon, SkipForward, Star, Trash2 } from 'lucide-react';
-import { dateKey, dueLabel, dueLabelInline, fromKey, today } from '../lib/date';
+import { AlarmClock, Bell, Check, CheckCircle2, ChevronDown, Clock, GripVertical, Folder, ListChecks, X, Hourglass, ListTodo, Pencil, Play, Plus, Repeat as RepeatIcon, SkipForward, Star, Trash2 } from 'lucide-react';
+import { addDays, dateKey, dueLabel, dueLabelInline, formatDuration, formatTime, fromKey, today } from '../lib/date';
+import { askForNotifications } from '../lib/useReminders';
+import { nextWeek } from '../lib/plan';
 import { parseQuick, splitSteps } from '../lib/parse';
 import { anchored, DAY_SHORT, firstDue, MON_FIRST, nextDue, repeatLabel } from '../lib/repeat';
 import { actions, uid, useStore } from '../lib/store';
@@ -11,7 +13,9 @@ import { Card, Dialog, DialogHead, Empty, Segmented, toast } from './ui';
 type Filter = 'all' | 'today' | 'upcoming' | 'waiting';
 const FILTER_KEY = 'daily-dashboard:task-filter';
 const rank: Record<Priority, number> = { high: 0, med: 1, low: 2 };
-const byPriority = (a: Task, b: Task) => rank[a.priority] - rank[b.priority] || (a.dueDate ?? '9').localeCompare(b.dueDate ?? '9');
+// Your dragged order comes first; tasks you haven't placed go after, by priority.
+const byPriority = (a: Task, b: Task) =>
+  (a.order ?? 1e9) - (b.order ?? 1e9) || rank[a.priority] - rank[b.priority] || (a.dueDate ?? '9').localeCompare(b.dueDate ?? '9');
 
 function readFilter(): Filter {
   try {
@@ -63,6 +67,7 @@ export function Tasks({ editRequest = 0, onRequestHandled, todayOnly = false, pr
     const overdue = active.filter((x) => x.dueDate && x.dueDate < t).sort(byPriority);
     const dueToday = active.filter((x) => x.dueDate === t).sort(byPriority);
     const upcoming = active.filter((x) => x.dueDate && x.dueDate > t).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!) || byPriority(a, b));
+
     const someday = active.filter((x) => !x.dueDate).sort(byPriority);
     const waiting = open.filter((x) => x.waitingOn);
     const done = tasks
@@ -90,6 +95,30 @@ export function Tasks({ editRequest = 0, onRequestHandled, todayOnly = false, pr
               { title: 'Waiting on others', items: groups.waiting },
             ];
   const visible = sections.filter((s) => s.items.length);
+
+  // Drag to reorder. Dropping into another group moves the date: Today → today, Anytime → no date.
+  const [drag, setDrag] = useState<{ id: string; from: string } | null>(null);
+  const [over, setOver] = useState<{ id: string; after: boolean } | null>(null);
+  const canDrop = (to: string) =>
+    !!drag && (drag.from === to || to === 'Today' || to === 'Anytime' || (to === 'Upcoming' && drag.from !== 'Waiting on others'));
+  const drop = (section: { title: string; items: Task[] }, targetId: string, after: boolean) => {
+    if (!drag || !canDrop(section.title)) return;
+    const ids = section.items.map((x) => x.id).filter((id) => id !== drag.id);
+    const at = ids.indexOf(targetId);
+    ids.splice(at < 0 ? ids.length : at + (after ? 1 : 0), 0, drag.id);
+    const dragged = tasks.find((x) => x.id === drag.id);
+    const patch: Partial<Task> =
+      section.title === drag.from || !dragged
+        ? {}
+        : section.title === 'Today'
+          ? { dueDate: t }
+          : section.title === 'Anytime'
+            ? { dueDate: undefined }
+            : { dueDate: dragged.dueDate && dragged.dueDate > t ? dragged.dueDate : addDays(t, 1) };
+    actions.reorderTasks(ids, { id: drag.id, patch });
+    if (patch.dueDate !== undefined || 'dueDate' in patch) toast(`Moved to ${section.title.toLowerCase()}`);
+  };
+  const todayMinutes = [...groups.overdue, ...groups.dueToday].reduce((n, x) => n + (x.estimate ?? 0), 0);
   const done = filter === 'all' ? groups.done.slice(0, 12) : filter === 'today' ? groups.doneToday : [];
   const projectName = (id?: string) => projects.find((p) => p.id === id)?.name;
 
@@ -99,7 +128,7 @@ export function Tasks({ editRequest = 0, onRequestHandled, todayOnly = false, pr
       icon={<ListTodo size={16} />}
       meta={
         todayOnly
-          ? `${groups.overdue.length + groups.dueToday.length} for today`
+          ? `${groups.overdue.length + groups.dueToday.length} for today${todayMinutes ? ` · ~${formatDuration(todayMinutes)}` : ''}`
           : `${groups.overdue.length + groups.dueToday.length + groups.upcoming.length + groups.someday.length} open`
       }
       actions={
@@ -147,7 +176,27 @@ export function Tasks({ editRequest = 0, onRequestHandled, todayOnly = false, pr
             <div key={s.title}>
               {(visible.length > 1 || filter === 'all') && <div className="task-section">{s.title}</div>}
               {s.items.map((x) => (
-                <TaskRow key={x.id} task={x} project={projectId ? undefined : projectName(x.projectId)} onEdit={() => setEditing(x)} />
+                <TaskRow
+                  key={x.id}
+                  task={x}
+                  project={projectId ? undefined : projectName(x.projectId)}
+                  onEdit={() => setEditing(x)}
+                  drag={{
+                    dragging: drag?.id === x.id,
+                    dropHint: over?.id === x.id && drag?.id !== x.id ? (over.after ? 'after' : 'before') : undefined,
+                    onStart: () => setDrag({ id: x.id, from: s.title }),
+                    onEnd: () => {
+                      setDrag(null);
+                      setOver(null);
+                    },
+                    onOver: (after) => {
+                      if (!canDrop(s.title)) return false;
+                      if (over?.id !== x.id || over.after !== after) setOver({ id: x.id, after });
+                      return true;
+                    },
+                    onDrop: (after) => drop(s, x.id, after),
+                  }}
+                />
               ))}
             </div>
           ))}
@@ -179,14 +228,52 @@ export function Tasks({ editRequest = 0, onRequestHandled, todayOnly = false, pr
   );
 }
 
-function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEdit: () => void }) {
+interface RowDrag {
+  dragging: boolean;
+  dropHint?: 'before' | 'after';
+  onStart: () => void;
+  onEnd: () => void;
+  /** Return false when this row can't take the drop. */
+  onOver: (after: boolean) => boolean;
+  onDrop: (after: boolean) => void;
+}
+
+function TaskRow({ task, project, onEdit, drag }: { task: Task; project?: string; onEdit: () => void; drag?: RowDrag }) {
   const t = today();
+  const use24h = useStore((x) => x.settings.use24h);
   const overdue = !task.done && task.dueDate && task.dueDate < t;
   const steps = task.subtasks ?? [];
   const stepsDone = steps.filter((x) => x.done).length;
   const [open, setOpen] = useState(false);
   return (
-    <div className={`task ${task.done ? 'done' : ''}`}>
+    <div
+      className={`task ${task.done ? 'done' : ''} ${drag?.dragging ? 'dragging' : ''} ${drag?.dropHint ? `drop-${drag.dropHint}` : ''}`}
+      draggable={!!drag && !task.done}
+      onDragStart={(e) => {
+        if (!drag || (e.target as HTMLElement).closest('input, textarea')) return;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', task.title);
+        drag.onStart();
+      }}
+      onDragEnd={() => drag?.onEnd()}
+      onDragOver={(e) => {
+        if (!drag) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        if (drag.onOver(e.clientY > r.top + r.height / 2)) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (!drag) return;
+        e.preventDefault();
+        const r = e.currentTarget.getBoundingClientRect();
+        drag.onDrop(e.clientY > r.top + r.height / 2);
+        drag.onEnd();
+      }}
+    >
+      {drag && !task.done && (
+        <span className="grip" aria-hidden>
+          <GripVertical size={13} />
+        </span>
+      )}
       <button
         className={`check ${task.done ? 'on' : ''}`}
         data-p={task.priority}
@@ -202,7 +289,7 @@ function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEd
       </button>
       <div className="task-title" onDoubleClick={onEdit}>
         <p>{task.title}</p>
-        {(task.dueDate || task.waitingOn || project || task.repeat || steps.length > 0 || task.priority === 'high') && !task.done && (
+        {(task.dueDate || task.waitingOn || project || task.repeat || task.estimate || task.remindAt || steps.length > 0 || task.priority === 'high') && !task.done && (
           <div className="task-meta">
             {steps.length > 0 && (
               <button
@@ -218,6 +305,16 @@ function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEd
             )}
             {task.priority === 'high' && <span className="chip high">High</span>}
             {task.dueDate && <span className={`chip ${overdue ? 'overdue' : task.dueDate === t ? 'accent' : ''}`}>{dueLabel(task.dueDate)}</span>}
+            {task.remindAt && (
+              <span className="chip num" title="Reminder">
+                <Bell size={10} /> {formatTime(task.remindAt, use24h)}
+              </span>
+            )}
+            {task.estimate && (
+              <span className="chip num" title="Estimated time">
+                <Clock size={10} /> {formatDuration(task.estimate)}
+              </span>
+            )}
             {task.repeat && (
               <span className="chip" title="Repeats — the next one is added when you complete this">
                 <RepeatIcon size={10} /> {repeatLabel(task.repeat)}
@@ -266,6 +363,7 @@ function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEd
             </button>
           </>
         )}
+        {!task.done && <SnoozeMenu task={task} />}
         <button className="icon-btn sm" title="Edit" aria-label="Edit task" onClick={onEdit}>
           <Pencil size={14} />
         </button>
@@ -289,7 +387,7 @@ function TaskEditor({ task, onClose, defaultProjectId }: { task: Task | 'new' | 
   const projects = useStore((s) => s.projects);
   const isNew = task === 'new';
   const init = task && task !== 'new' ? task : undefined;
-  const [form, setForm] = useState({ title: '', notes: '', dueDate: '', priority: 'med' as Priority, waitingOn: '', projectId: '', freq: '' as RepeatFreq | '', interval: 1, days: [] as number[], subtasks: [] as Subtask[] });
+  const [form, setForm] = useState({ title: '', notes: '', dueDate: '', priority: 'med' as Priority, waitingOn: '', projectId: '', freq: '' as RepeatFreq | '', interval: 1, days: [] as number[], subtasks: [] as Subtask[], estimate: 0, remindAt: '' });
   const [forTask, setForTask] = useState<unknown>(null);
   if (task !== forTask) {
     setForTask(task);
@@ -304,6 +402,8 @@ function TaskEditor({ task, onClose, defaultProjectId }: { task: Task | 'new' | 
       interval: init?.repeat?.interval ?? 1,
       days: init?.repeat?.days ?? [],
       subtasks: init?.subtasks ?? [],
+      estimate: init?.estimate ?? 0,
+      remindAt: init?.remindAt ?? '',
     });
   }
   const set = (p: Partial<typeof form>) => setForm((f) => ({ ...f, ...p }));
@@ -318,10 +418,13 @@ function TaskEditor({ task, onClose, defaultProjectId }: { task: Task | 'new' | 
       dueDate,
       repeat,
       subtasks: cleanSteps(form.subtasks),
+      estimate: form.estimate || undefined,
+      remindAt: form.remindAt || undefined,
       priority: form.priority,
       waitingOn: form.waitingOn.trim() || undefined,
       projectId: form.projectId || undefined,
     };
+    if (data.remindAt && data.remindAt !== init?.remindAt) askForNotifications();
     if (init) actions.updateTask(init.id, data);
     else actions.addTask(data);
     onClose();
@@ -353,6 +456,23 @@ function TaskEditor({ task, onClose, defaultProjectId }: { task: Task | 'new' | 
               ]}
             />
           </div>
+        </div>
+        <div className="row">
+          <label className="field">
+            <span>Remind me at</span>
+            <input className="input" type="time" value={form.remindAt} onChange={(e) => set({ remindAt: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Estimate</span>
+            <select className="select input" value={form.estimate} onChange={(e) => set({ estimate: Number(e.target.value) })}>
+              {ESTIMATES.includes(form.estimate) ? null : <option value={form.estimate}>{formatDuration(form.estimate)}</option>}
+              {ESTIMATES.map((m) => (
+                <option key={m} value={m}>
+                  {m ? formatDuration(m) : 'No estimate'}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="row">
           <label className="field">
@@ -416,6 +536,8 @@ function TaskEditor({ task, onClose, defaultProjectId }: { task: Task | 'new' | 
     </Dialog>
   );
 }
+
+const ESTIMATES = [0, 5, 10, 15, 30, 45, 60, 90, 120, 180, 240];
 
 /* ---------- Repeat ---------- */
 
@@ -668,6 +790,49 @@ function ProjectQuickAdd({ projectId }: { projectId: string }) {
           if (e.key === 'Escape') setText('');
         }}
       />
+    </div>
+  );
+}
+
+/* ---------- Snooze ---------- */
+
+/** Push a task out without opening the editor: tomorrow, next Monday, or a date you pick. */
+function SnoozeMenu({ task }: { task: Task }) {
+  const [open, setOpen] = useState(false);
+  const t = today();
+  const snooze = (dueDate: string) => {
+    const before = task.dueDate;
+    actions.updateTask(task.id, { dueDate });
+    toast(`Snoozed to ${dueLabelInline(dueDate)}`, { label: 'Undo', run: () => actions.updateTask(task.id, { dueDate: before }) });
+    setOpen(false);
+  };
+  return (
+    <div
+      className="snooze"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <button className="icon-btn sm task-extra" title="Snooze" aria-label="Snooze task" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <AlarmClock size={14} />
+      </button>
+      {open && (
+        <div className="snooze-menu" role="menu" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+          <button role="menuitem" autoFocus onClick={() => snooze(addDays(t, 1))}>
+            Tomorrow <small>{fromKey(addDays(t, 1)).toLocaleDateString(undefined, { weekday: 'short' })}</small>
+          </button>
+          <button role="menuitem" onClick={() => snooze(addDays(t, 2))}>
+            In 2 days <small>{fromKey(addDays(t, 2)).toLocaleDateString(undefined, { weekday: 'short' })}</small>
+          </button>
+          <button role="menuitem" onClick={() => snooze(nextWeek(t))}>
+            Next week <small>Mon</small>
+          </button>
+          <label className="snooze-date">
+            <span>Pick a date</span>
+            <input type="date" min={addDays(t, 1)} onChange={(e) => e.target.value && snooze(e.target.value)} />
+          </label>
+        </div>
+      )}
     </div>
   );
 }

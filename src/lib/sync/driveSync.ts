@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { toast } from '../../components/ui';
-import { AuthError, clearToken, currentToken, fetchAccount, googleConfigured, loadGis, requestToken, revokeAccess } from '../google/auth';
+import { AuthError, clearToken, currentToken, fetchAccount, googleConfigured, loadGis, requestToken, revokeAccess, tokenExpiresAt } from '../google/auth';
 import { drive } from '../google/drive';
 import { disconnectCalendar, refreshCalendar } from '../gcal';
 import { applyRemote, getState, onLocalChange, replaceState, rollover, setState } from '../store';
@@ -52,6 +52,9 @@ export function initDriveSync() {
   // Look for changes from other devices every few minutes while the dashboard is open.
   setInterval(() => document.visibilityState === 'visible' && engine.wake(), 5 * 60_000);
   engine.start();
+  // Stay signed in: renew the hour-long Google sign-in on your next click before it runs out.
+  setInterval(armRenewal, 60_000);
+  armRenewal();
 }
 
 function authFailed(e: unknown) {
@@ -103,3 +106,53 @@ export const replaceDriveCopy = () => engine?.replaceRemote();
 export const listDriveVersions = () => engine?.versions() ?? Promise.resolve([]);
 export const restoreDriveVersion = (id: string) => engine?.restore(id);
 export const hasValidToken = () => !!currentToken();
+
+/* ---------- Staying signed in ---------- */
+
+const RENEW_KEY = 'daily-dashboard:stay-signed-in';
+let armed = false;
+let quietUntil = 0;
+
+export function staySignedIn(): boolean {
+  try {
+    return localStorage.getItem(RENEW_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+export function setStaySignedIn(on: boolean) {
+  try {
+    localStorage.setItem(RENEW_KEY, on ? '1' : '0');
+  } catch {
+    /* optional */
+  }
+  if (on) armRenewal();
+}
+
+/**
+ * Google only hands out a new token from a click or key press, so when the current one is close
+ * to running out, wait for your next one and renew then. Google's window opens and closes by
+ * itself because you've already said yes; if anything goes wrong it stays quiet and tries later.
+ */
+function armRenewal() {
+  if (!engine || armed || !staySignedIn() || Date.now() < quietUntil) return;
+  const account = engine.getView().account;
+  const expires = tokenExpiresAt();
+  if (!account || (expires && expires - Date.now() > 5 * 60_000)) return;
+  armed = true;
+  const onGesture = () => {
+    window.removeEventListener('pointerdown', onGesture, true);
+    window.removeEventListener('keydown', onGesture, true);
+    armed = false;
+    // Don't step on a sign-in you're already doing, or re-ask in a loop if Google said no.
+    if (currentToken() && (tokenExpiresAt() ?? 0) - Date.now() > 5 * 60_000) return;
+    requestToken('', account.email)
+      .then(() => engine.resumed())
+      .then(() => refreshCalendar(true))
+      .catch(() => {
+        quietUntil = Date.now() + 10 * 60_000;
+      });
+  };
+  window.addEventListener('pointerdown', onGesture, true);
+  window.addEventListener('keydown', onGesture, true);
+}

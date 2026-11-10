@@ -21,6 +21,8 @@ export interface GCalendar {
 /** An event shown on the dashboard. Google ones carry where they came from and can't be edited here. */
 export interface ShownEvent extends CalEvent {
   google?: { calendar: string; color?: string; link?: string };
+  /** An interview from the Jobs tab. */
+  jobId?: string;
 }
 
 type GDate = { date?: string; dateTime?: string };

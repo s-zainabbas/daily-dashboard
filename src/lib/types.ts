@@ -41,6 +41,12 @@ export interface Task {
   notes?: string;
   /** Checklist of steps. */
   subtasks?: Subtask[];
+  /** Rough time it'll take, in minutes. */
+  estimate?: number;
+  /** Your own order within its group, set by dragging. Lower comes first. */
+  order?: number;
+  /** Remind me at this time on the due date (or today, if it has no date). */
+  remindAt?: TimeKey;
   repeat?: Repeat;
   /** Id shared by every copy of a repeating task (the first copy's id). */
   seriesId?: string;
@@ -70,7 +76,12 @@ export interface Project {
 export interface Habit {
   id: string;
   name: string;
-  history: Record<DateKey, boolean>;
+  /** Per day: ticked (true) or, for counted habits, how many so far. */
+  history: Record<DateKey, boolean | number>;
+  /** Which weekdays it's on, 0 = Sunday … 6 = Saturday. Missing = every day. */
+  days?: number[];
+  /** Counted habits: how many a day, e.g. 8 glasses of water. Missing = a simple yes / no. */
+  target?: number;
   createdAt: number;
 }
 
@@ -93,7 +104,39 @@ export interface JobApplication {
   notes?: string;
   /** Copy of the posting, kept in case it's taken down before an interview. */
   description?: string;
+  /** Recruiter or person you're talking to. */
+  contact?: string;
+  salary?: string;
+  /** Next interview, local "YYYY-MM-DDTHH:MM". Shows in Schedule. */
+  interviewAt?: string;
+  /** Last time you followed up, to reset the "follow up?" nudge. */
+  followedUpOn?: DateKey;
   createdAt: number;
+}
+
+/** One note on the Notes tab. Light formatting: # headings, **bold**, - lists, - [ ] checkboxes, links. */
+export interface NotePage {
+  id: string;
+  title: string;
+  body: string;
+  pinned?: boolean;
+  updatedAt: number;
+}
+
+/** A weekly goal, set in the weekly review. */
+export interface WeekGoal {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+/** The current week's goals and last weekly review. `key` is the Monday the goals are for. */
+export interface WeekPlan {
+  key: DateKey;
+  goals: WeekGoal[];
+  reviewedOn?: DateKey;
+  wentWell?: string;
+  change?: string;
 }
 
 export interface Reflection {
@@ -101,6 +144,10 @@ export interface Reflection {
   slipped: string;
   carries: string;
   mood?: Mood;
+  /** Set by the shutdown routine: becomes the #1 priority when the day rolls over at midnight. */
+  nextPriority?: string;
+  /** The shutdown routine was finished today. */
+  closed?: boolean;
 }
 
 export interface DayLog extends Reflection {
@@ -114,6 +161,8 @@ export interface DayLog extends Reflection {
 export interface FocusDay {
   minutes: number;
   sessions: number;
+  /** Minutes per thing you focused on (task id, or "priority"), with its title kept for history. */
+  items?: Record<string, { title: string; minutes: number; projectId?: string }>;
 }
 
 export interface Settings {
@@ -126,6 +175,8 @@ export interface Settings {
   breakMinutes: number;
   location?: { name: string; latitude: number; longitude: number };
   sound: boolean;
+  /** Minutes before an event to remind you; 0 = off. */
+  eventReminder?: number;
 }
 
 export interface State {
@@ -138,7 +189,10 @@ export interface State {
   habits: Habit[];
   links: QuickLink[];
   jobs: JobApplication[];
+  /** The original single scratchpad. Kept for older versions; the Notes tab uses `pages`. */
   notes: string;
+  pages: NotePage[];
+  week?: WeekPlan;
   /** `plannedOn`: the day you last ran "Plan my day" (kept here so it syncs with the priority). */
   priority: { title: string; done: boolean; plannedOn?: DateKey };
   reflection: Reflection;

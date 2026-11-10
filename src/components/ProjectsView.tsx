@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, Pencil } from 'lucide-react';
 import { useStore } from '../lib/store';
 import type { Project } from '../lib/types';
@@ -26,6 +26,11 @@ export function ProjectsView() {
       /* optional */
     }
   };
+  useEffect(() => {
+    const on = (e: Event) => select((e as CustomEvent<string>).detail);
+    window.addEventListener('dd:open-project', on);
+    return () => window.removeEventListener('dd:open-project', on);
+  }, []);
   // The remembered project, or the first one that isn't finished.
   const project = projects.find((p) => p.id === picked) ?? projects.find((p) => p.status !== 'done') ?? projects[0];
 

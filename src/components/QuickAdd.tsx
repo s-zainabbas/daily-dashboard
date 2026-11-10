@@ -1,10 +1,11 @@
 import { forwardRef, useMemo, useState } from 'react';
-import { CalendarClock, CheckCircle2, CornerDownLeft, Flag, Plus, Repeat as RepeatIcon } from 'lucide-react';
-import { dueLabel, dueLabelInline, formatTime } from '../lib/date';
+import { Bell, CalendarClock, CheckCircle2, Clock, CornerDownLeft, Flag, Plus, Repeat as RepeatIcon } from 'lucide-react';
+import { dueLabel, dueLabelInline, formatDuration, formatTime } from '../lib/date';
 import { parseQuick } from '../lib/parse';
 import { repeatLabel } from '../lib/repeat';
 import { actions, useStore } from '../lib/store';
 import { toast } from './ui';
+import { askForNotifications } from '../lib/useReminders';
 
 const EXAMPLES = ['Call Sam tomorrow !high', 'Standup at 9:30 for 15m', 'Dentist fri 3-4pm', 'Send invoice nov 14', 'Gym every mon wed fri', 'Pay rent monthly'];
 
@@ -21,7 +22,8 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
       actions.addEvent({ title: p.title, date: p.date!, start: p.start, end: p.end });
       toast(`Event added · ${dueLabel(p.date!)} ${formatTime(p.start!, use24h)}`);
     } else {
-      actions.addTask({ title: p.title, dueDate: p.date, priority: p.priority ?? 'med', repeat: p.repeat });
+      actions.addTask({ title: p.title, dueDate: p.date, priority: p.priority ?? 'med', repeat: p.repeat, estimate: p.estimate, remindAt: p.remindAt });
+      if (p.remindAt) askForNotifications();
       toast(p.repeat && p.date ? `Repeating task added · ${repeatLabel(p.repeat)}, first one ${dueLabelInline(p.date)}` : `Task added${p.date ? ` · ${dueLabel(p.date)}` : ''}`);
     }
     setText('');
@@ -75,6 +77,16 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
                 {p.end ? ` – ${formatTime(p.end, use24h)}` : ''}
               </span>
             )}
+            {p.remindAt && (
+              <span className="chip num">
+                <Bell size={11} /> {formatTime(p.remindAt, use24h)}
+              </span>
+            )}
+            {p.estimate && (
+              <span className="chip num">
+                <Clock size={11} /> ~{formatDuration(p.estimate)}
+              </span>
+            )}
             {p.priority && (
               <span className={`chip ${p.priority}`}>
                 <Flag size={11} /> {p.priority === 'med' ? 'Medium' : p.priority === 'high' ? 'High' : 'Low'}
@@ -84,7 +96,7 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
           </>
         ) : (
           <span className="examples">
-            Understands dates (<b>tomorrow</b>, <b>fri</b>, <b>nov 14</b>), times (<b>3pm</b>, <b>9-10:30</b>) and priority (<b>!high</b>) and repeats (<b>every mon</b>, <b>daily</b>). Add a time to make it an event.
+            Understands dates (<b>tomorrow</b>, <b>fri</b>, <b>nov 14</b>), times (<b>3pm</b>, <b>9-10:30</b>) and priority (<b>!high</b>), repeats (<b>every mon</b>) and how long it takes (<b>2h</b>). Add a time to make it an event.
           </span>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
-import { CheckCircle2, Download, Flame, LocateFixed, Minus, Plus, Search, Target, Timer, Upload } from 'lucide-react';
-import { formatDuration, fromKey, lastDays, today } from '../lib/date';
+import { Download, Flame, LocateFixed, Minus, Plus, Search, Upload } from 'lucide-react';
+import { today } from '../lib/date';
 import { demoState } from '../lib/demo';
 import { actions, emptyState, getState, replaceState, useStore } from '../lib/store';
 import { timerActions } from '../lib/timer';
@@ -8,100 +8,9 @@ import type { Accent, Theme } from '../lib/types';
 import { clearWeatherCache, searchPlaces, type Place } from '../lib/weather';
 import { useDriveSync } from '../lib/sync/driveSync';
 import { DriveSyncSection } from './DriveSync';
+import { RemindersSection } from './RemindersSettings';
 import { CalendarSection } from './CalendarSettings';
-import { MOODS } from './Panels';
-import { Dialog, DialogHead, Empty, Segmented, Switch, toast } from './ui';
-
-/* ---------- Journal ---------- */
-
-export function Journal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const journal = useStore((s) => s.journal);
-  const focus = useStore((s) => s.focus);
-  const days = lastDays(7);
-  const max = Math.max(60, ...days.map((d) => focus[d]?.minutes ?? 0));
-  const weekTotal = days.reduce((a, d) => a + (focus[d]?.minutes ?? 0), 0);
-  const priorityRate = journal.length ? Math.round((journal.filter((j) => j.priorityDone).length / journal.length) * 100) : 0;
-
-  return (
-    <Dialog open={open} onClose={onClose} className="drawer" label="Journal">
-      <DialogHead title="Journal" onClose={onClose} />
-      <div className="drawer-body">
-        <section>
-          <h3>Focus this week · {formatDuration(weekTotal)}</h3>
-          <div className="week-chart">
-            {days.map((d) => {
-              const v = focus[d]?.minutes ?? 0;
-              return (
-                <div key={d} title={`${formatDuration(v)} on ${fromKey(d).toLocaleDateString()}`}>
-                  <i className={v ? '' : 'zero'} style={{ height: `${Math.max(3, (v / max) * 100)}%` }} />
-                  <span>{fromKey(d).toLocaleDateString(undefined, { weekday: 'short' })}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-        {journal.length > 0 && (
-          <section className="row" style={{ gap: 8 }}>
-            <div className="journal-day" style={{ textAlign: 'center' }}>
-              <b style={{ fontSize: 22 }} className="num">
-                {journal.length}
-              </b>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>days logged</span>
-            </div>
-            <div className="journal-day" style={{ textAlign: 'center' }}>
-              <b style={{ fontSize: 22 }} className="num">
-                {priorityRate}%
-              </b>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>#1 priority hit</span>
-            </div>
-          </section>
-        )}
-        <section style={{ display: 'grid', gap: 10 }}>
-          <h3>Past days</h3>
-          {journal.length === 0 ? (
-            <Empty title="Your journal starts tonight">
-              Fill in the end-of-day review. At midnight it’s saved here with your priority, completed tasks and focus time.
-            </Empty>
-          ) : (
-            journal.map((j) => (
-              <article className="journal-day" key={j.date}>
-                <div className="journal-top">
-                  <b>{fromKey(j.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</b>
-                  {j.mood && <span className="mood-face" title={MOODS[j.mood - 1].label}>{MOODS[j.mood - 1].face}</span>}
-                </div>
-                <div className="journal-stats num">
-                  {j.priority && (
-                    <span style={{ color: j.priorityDone ? 'var(--ok)' : undefined }}>
-                      <Target size={12} /> {j.priority}
-                    </span>
-                  )}
-                  <span>
-                    <CheckCircle2 size={12} /> {j.tasksDone} done
-                  </span>
-                  <span>
-                    <Timer size={12} /> {formatDuration(j.focusMinutes)}
-                  </span>
-                </div>
-                {j.shipped && (
-                  <div className="journal-line">
-                    <i>Shipped</i>
-                    {j.shipped}
-                  </div>
-                )}
-                {j.slipped && (
-                  <div className="journal-line">
-                    <i>Slipped</i>
-                    {j.slipped}
-                  </div>
-                )}
-              </article>
-            ))
-          )}
-        </section>
-      </div>
-    </Dialog>
-  );
-}
+import { Dialog, DialogHead, Segmented, Switch, toast } from './ui';
 
 /* ---------- Settings ---------- */
 
@@ -221,6 +130,8 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
             <Switch label="24-hour clock" checked={s.use24h} onChange={(v) => actions.setSettings({ use24h: v })} />
           </div>
         </section>
+
+        <RemindersSection />
 
         <section>
           <h3>Focus timer</h3>
@@ -355,14 +266,17 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
 
 export const SHORTCUTS: [string[], string][] = [
   [['⌘', 'K'], 'Command menu'],
-  [['1', '–', '6'], 'Switch tab (Today, Tasks, Schedule, Projects, Jobs, Notes)'],
+  [['1', '–', '8'], 'Switch tab (Today, Tasks, Schedule, Projects, Jobs, Notes, Journal, Insights)'],
   [['['], 'Collapse / expand sidebar'],
   [['P'], 'Plan my day'],
+  [['S'], 'Shut down for the day'],
+  [['W'], 'Weekly review'],
+  [['⇧', 'F'], 'Full-screen focus mode'],
   [['/'], 'Quick add'],
   [['N'], 'New task'],
   [['E'], 'New event'],
   [['F'], 'Start / pause focus timer'],
-  [['J'], 'Open journal'],
+  [['J'], 'Journal'],
   [['T'], 'Toggle light / dark'],
   [['?'], 'Show shortcuts'],
   [['Esc'], 'Close any dialog'],

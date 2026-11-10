@@ -11,7 +11,16 @@ export interface Parsed {
   priority?: Priority;
   /** Set for "every …" phrases. A repeating item is always a task (any time stays in the title). */
   repeat?: Repeat;
+  /** Tasks only: how long it'll take, in minutes ("2h", "~30m", "1h30", "for 45m"). */
+  estimate?: number;
+  /** Tasks only: "remind 3pm" / "remind me at 9:30". */
+  remindAt?: TimeKey;
 }
+
+const unitMinutes = (n: string, unit: string) => Math.round(Number(n) * (unit.toLowerCase().startsWith('h') ? 60 : 1));
+const EST_HM = /\s(?:for\s+|~\s?)?(\d{1,2})\s*h\s*(\d{1,2})\s*m?(?=\s)/i;
+const EST = /\s(?:for\s+|~\s?)?(\d+(?:\.\d+)?)\s*(m|min|mins|minutes|h|hr|hrs|hour|hours)(?=\s)/i;
+const okEstimate = (m: number) => m >= 1 && m <= 16 * 60;
 
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -32,6 +41,7 @@ function to24(h: number, mer?: string, guessPm = false): number {
  *   "Send invoice nov 14"           → task due Nov 14
  *   "Gym every mon wed fri"         → task repeating on those days
  *   "Pay rent monthly"              → task repeating every month
+ *   "Write report 2h"               → task with a 2-hour estimate
  */
 export function parseQuick(input: string, ref: DateKey = today()): Parsed {
   let text = ` ${input} `;
@@ -40,11 +50,31 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
     const m = text.match(re);
     if (m && fn(m) !== false) text = text.replace(m[0], ' ');
   };
+  const takeEstimate = () => {
+    take(EST_HM, (m) => {
+      const v = Number(m[1]) * 60 + Number(m[2]);
+      if (!okEstimate(v) || Number(m[2]) > 59) return false;
+      out.estimate = v;
+    });
+    if (!out.estimate)
+      take(EST, (m) => {
+        const v = unitMinutes(m[1], m[2]);
+        if (!okEstimate(v)) return false;
+        out.estimate = v;
+      });
+  };
 
   // Priority: !high / !med / !low / !h / ! / !! / !!!
   take(/\s(!{1,3}|!(?:high|h|med|medium|m|low|l))(?=\s)/i, (m) => {
     const t = m[1].toLowerCase();
     out.priority = t === '!!!' || t === '!high' || t === '!h' ? 'high' : t === '!!' || t.startsWith('!m') ? 'med' : t === '!' ? 'high' : 'low';
+  });
+
+  // Reminder: "remind 3pm", "remind me at 9:30" (before times, so it doesn't turn the task into an event).
+  take(/\sremind(?:\s+me)?(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?=\s)/i, (m) => {
+    const hour = to24(Number(m[1]), m[3], !m[2]);
+    if (hour > 23 || Number(m[2] || 0) > 59) return false;
+    out.remindAt = fromMinutes(hour * 60 + Number(m[2] || 0));
   });
 
   // Repeats — before dates, so "every monday" isn't read as "next Monday".
@@ -115,6 +145,7 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
     // A start date ("from tomorrow", "starting nov 14") counts if it fits; otherwise the first day that does.
     out.date = firstDue(out.repeat, out.date ?? ref);
     out.repeat = anchored(out.repeat, out.date);
+    takeEstimate();
     out.title = text.replace(/\s+/g, ' ').trim().replace(/\s+(on|at|by|due|from|starting)$/i, '').trim();
     return out;
   }
@@ -144,9 +175,17 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
 
   // Duration: "for 30m", "for 1.5h"
   let duration = 60;
+  let durationGiven = false;
   take(/\sfor\s+(\d+(?:\.\d+)?)\s*(m|min|mins|minutes|h|hr|hrs|hour|hours)(?=\s)/i, (m) => {
-    duration = Math.round(Number(m[1]) * (m[2].toLowerCase().startsWith('h') ? 60 : 1));
+    duration = unitMinutes(m[1], m[2]);
+    durationGiven = true;
   });
+
+  // Without a time it's a task, and a duration is how long it'll take.
+  if (!out.start) {
+    if (durationGiven) out.estimate = duration;
+    else takeEstimate();
+  }
 
   if (out.start) {
     out.kind = 'event';

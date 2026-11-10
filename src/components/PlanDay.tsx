@@ -52,6 +52,8 @@ function PlanFlow({ onClose }: { onClose: () => void }) {
 
   const all = [...c.today, ...c.soon, ...c.anytime];
   const pickedTasks = all.filter((x) => chosen.has(x.id));
+  const plannedMinutes = pickedTasks.reduce((n, x) => n + (x.estimate ?? 0), 0);
+  const unestimated = pickedTasks.filter((x) => !x.estimate).length;
   const free = freeMinutes(events, t, nowMinutes(now));
   const eventsLeft = events.filter((e) => e.date === t && e.start && (e.end ?? e.start) > `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`).length;
   const yesterday = s.journal.find((j) => j.date === addDays(t, -1));
@@ -168,6 +170,13 @@ function PlanFlow({ onClose }: { onClose: () => void }) {
                 <PickGroup title="Coming up this week" tasks={c.soon} chosen={chosen} onToggle={toggle} dueOn={c.dueOn} />
                 <PickGroup title="Anytime" tasks={c.anytime.slice(0, 8)} chosen={chosen} onToggle={toggle} dueOn={c.dueOn} />
               </div>
+            )}
+            {plannedMinutes > 0 && (
+              <p className={`plan-fit ${free > 0 && plannedMinutes > free ? 'over' : ''}`}>
+                Picked about <b>{formatDuration(plannedMinutes)}</b> of work
+                {free > 0 ? (plannedMinutes > free ? ` — more than the ${formatDuration(free)} you have free. Consider moving something to tomorrow.` : ` · fits in your ${formatDuration(free)} free.`) : '.'}
+                {unestimated > 0 && ` (${unestimated} without an estimate)`}
+              </p>
             )}
             {chosen.size > 6 && <p className="plan-warn">That’s {chosen.size} tasks. Good days usually have 3–5 must-dos; the rest can wait.</p>}
             <div className="modal-foot">
@@ -289,6 +298,7 @@ function TaskChips({ task, due = task.dueDate }: { task: Task; due?: string | nu
     <span className="plan-chips">
       {task.priority === 'high' && <span className="chip high">High</span>}
       {due && <span className={`chip ${due < todayKey() ? 'overdue' : ''}`}>{dueLabel(due)}</span>}
+      {task.estimate ? <span className="chip num">~{formatDuration(task.estimate)}</span> : null}
     </span>
   );
 }

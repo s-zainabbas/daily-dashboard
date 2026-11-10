@@ -9,6 +9,9 @@
  * there's something to show instantly and offline.
  */
 
+import { addDays, diffDays } from './date';
+import type { CalEvent, JobApplication } from './types';
+
 export interface JobInfo {
   company?: string;
   role?: string;
@@ -287,3 +290,38 @@ export async function lookupJob(url: string, signal?: AbortSignal): Promise<JobI
     description: found?.description || undefined,
   };
 }
+
+/* ---------- Follow-ups and interviews ---------- */
+
+/** Still "applied" a week after applying (or after your last follow-up): worth a nudge. */
+export function needsFollowUp(j: JobApplication, today: string, after = 7): boolean {
+  if (j.status !== 'applied') return false;
+  const since = j.followedUpOn && j.followedUpOn > j.appliedOn ? j.followedUpOn : j.appliedOn;
+  return diffDays(since, today) >= after;
+}
+
+/** Interviews as events for Schedule (one hour long). */
+export function interviewEvents(jobs: JobApplication[]): (CalEvent & { jobId: string })[] {
+  return jobs
+    .filter((j) => j.interviewAt && j.status !== 'rejected' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(j.interviewAt))
+    .map((j) => {
+      const [date, time] = j.interviewAt!.split('T');
+      const [h, m] = time.split(':').map(Number);
+      const endMin = Math.min(h * 60 + m + 60, 23 * 60 + 59);
+      const end = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+      return {
+        id: `job:${j.id}`,
+        jobId: j.id,
+        title: `Interview: ${[j.role, j.company].filter(Boolean).join(' at ') || 'job'}`,
+        date,
+        start: time.slice(0, 5),
+        end,
+        location: j.location,
+        notes: j.contact ? `With ${j.contact}` : undefined,
+      };
+    });
+}
+
+/** Interviews in the next `days` days. */
+export const upcomingInterviews = (jobs: JobApplication[], today: string, days = 7) =>
+  jobs.filter((j) => j.interviewAt && j.status !== 'rejected' && j.interviewAt.slice(0, 10) >= today && j.interviewAt.slice(0, 10) <= addDays(today, days));

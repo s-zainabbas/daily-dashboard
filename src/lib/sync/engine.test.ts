@@ -393,6 +393,19 @@ describe('edits on two devices at once', () => {
     expect(b.state.focus['2026-11-08']).toEqual({ minutes: 70, sessions: 3 });
   });
 
+  it('adds up per-task focus minutes from both devices', async () => {
+    const { a, b } = await pair();
+    const day = (minutes: number, sessions: number, w: number) => ({ '2026-11-08': { minutes, sessions, items: { w: { title: 'Write', minutes: w } } } });
+    a.edit((s) => ({ ...s, focus: day(25, 1, 25) }));
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    a.edit((s) => ({ ...s, focus: day(50, 2, 50) }));
+    b.edit((s) => ({ ...s, focus: day(45, 2, 45) }));
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    expect(b.state.focus['2026-11-08']).toEqual({ minutes: 70, sessions: 3, items: { w: { title: 'Write', minutes: 70 } } });
+  });
+
   it('never overwrites a save that landed while uploading — merges it instead', async () => {
     const { a, b, drive } = await pair();
     b.edit(addTask(task('Phone, same moment')));

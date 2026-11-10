@@ -3,6 +3,7 @@ import { CalendarClock, Timer } from 'lucide-react';
 import { dateKey, formatDuration, formatTime, lastDays, nowMinutes, toMinutes, today } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
+import { todayHabits } from '../lib/habits';
 import { useAllEvents } from '../lib/gcal';
 import type { CalEvent, Task } from '../lib/types';
 import { Ring } from './ui';
@@ -34,7 +35,9 @@ export function Stats() {
 
   const ts = useMemo(() => todayTaskStats(tasks, t), [tasks, t]);
   const { current, next, m } = useMemo(() => currentAndNext(events, now), [events, now]);
-  const habitsDone = habits.filter((h) => h.history[t]).length;
+  const th = todayHabits(habits, t);
+  const habitsDone = th.done.length;
+  const habitsOn = th.on.length;
   const week = lastDays(7, t).map((d) => focus[d]?.minutes ?? 0);
   const maxWeek = Math.max(60, ...week);
   const f = focus[t];
@@ -93,14 +96,14 @@ export function Stats() {
       </div>
 
       <div className="card stat">
-        <Ring value={habits.length ? habitsDone / habits.length : 0}>{habits.length ? `${habitsDone}/${habits.length}` : ''}</Ring>
+        <Ring value={habitsOn ? habitsDone / habitsOn : 0}>{habitsOn ? `${habitsDone}/${habitsOn}` : ''}</Ring>
         <div>
           <div className="label">Habits</div>
           <div className="value num">
             {habitsDone}
-            <small> / {habits.length} today</small>
+            <small> / {habitsOn} today</small>
           </div>
-          <div className="sub">{!habits.length ? 'Add one to build momentum' : habitsDone === habits.length ? 'Perfect day so far' : `${habits.length - habitsDone} to go`}</div>
+          <div className="sub">{!habits.length ? 'Add one to build momentum' : !habitsOn ? 'Rest day' : habitsDone === habitsOn ? 'Perfect day so far' : `${habitsOn - habitsDone} to go`}</div>
         </div>
       </div>
     </div>

@@ -107,3 +107,8 @@ export function streak(history: Record<DateKey, boolean>, ref: DateKey = today()
   }
   return n;
 }
+
+/** The wall-clock time `minutes` after `d`, as HH:MM (stays within the day). */
+export function addMinutesTo(d: Date, minutes: number): TimeKey {
+  return fromMinutes(Math.min(d.getHours() * 60 + d.getMinutes() + minutes, 23 * 60 + 59));
+}

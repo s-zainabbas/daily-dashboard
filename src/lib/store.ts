@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { dateKey, today } from './date';
 import { nextDue } from './repeat';
-import type { CalEvent, DayLog, Habit, JobApplication, Project, QuickLink, Settings, State, Task } from './types';
+import { bump } from './habits';
+import type { CalEvent, DayLog, Habit, JobApplication, NotePage, Project, QuickLink, Settings, State, Task } from './types';
 
 export const STORAGE_KEY = 'daily-dashboard:v2';
 const LEGACY_PREFIX = 'dashboard.';
@@ -17,6 +18,7 @@ export const defaultSettings: Settings = {
   focusMinutes: 25,
   breakMinutes: 5,
   sound: true,
+  eventReminder: 10,
 };
 
 export function emptyState(): State {
@@ -35,6 +37,7 @@ export function emptyState(): State {
     ],
     jobs: [],
     notes: '',
+    pages: [],
     priority: { title: '', done: false },
     reflection: { shipped: '', slipped: '', carries: '' },
     focus: {},
@@ -132,6 +135,12 @@ export function normalize(raw: any): State {
     reflection: { ...base.reflection, ...raw.reflection },
     settings: { ...defaultSettings, ...raw.settings },
     notes: typeof raw.notes === 'string' ? raw.notes : '',
+    pages: Array.isArray(raw.pages)
+      ? raw.pages
+      : // First run with multiple notes: the old scratchpad becomes the first note.
+        typeof raw.notes === 'string' && raw.notes.trim()
+        ? [{ id: 'scratchpad', title: 'Scratchpad', body: raw.notes, updatedAt: Date.now() }]
+        : [],
   };
 }
 
@@ -165,7 +174,12 @@ export function rollover(s: State, now = new Date()): State {
     lastActiveDate: t,
     journal,
     tasks: tasks.filter((x) => !x.done || (x.completedAt ?? Date.now()) > cutoff),
-    priority: s.priority.done || !s.priority.title ? { title: '', done: false } : s.priority,
+    // Tomorrow's #1 from the shutdown routine wins; otherwise an unfinished priority carries over.
+    priority: r.nextPriority?.trim()
+      ? { title: r.nextPriority.trim(), done: false }
+      : s.priority.done || !s.priority.title
+        ? { title: '', done: false }
+        : s.priority,
     reflection: { shipped: '', slipped: '', carries: '' },
   };
 }
@@ -352,6 +366,19 @@ export const actions = {
       }),
     );
   },
+  /**
+   * Put tasks in this order (by id), e.g. after a drag. `patch` changes the dragged task too,
+   * for example its due date when it's dropped into another group.
+   */
+  reorderTasks(ids: string[], moved?: { id: string; patch: Partial<Task> }) {
+    const pos = new Map(ids.map((id, i) => [id, i]));
+    patch('tasks', (ts) =>
+      ts.map((t) => {
+        const p = moved?.id === t.id ? moved.patch : undefined;
+        return pos.has(t.id) || p ? { ...t, ...p, ...(pos.has(t.id) ? { order: pos.get(t.id) } : {}) } : t;
+      }),
+    );
+  },
   /** Move a repeating task on to its next date without completing it. */
   skipTask(id: string): string | undefined {
     const task = getState().tasks.find((t) => t.id === id);
@@ -406,15 +433,19 @@ export const actions = {
     return () => project && patch('projects', (all) => (all.some((p) => p.id === id) ? all : [...all.slice(0, index), project, ...all.slice(index)]));
   },
 
-  addHabit(name: string) {
-    const h: Habit = { id: uid(), name, history: {}, createdAt: Date.now() };
+  addHabit(name: string, extra: Partial<Pick<Habit, 'days' | 'target'>> = {}) {
+    const h: Habit = { id: uid(), name, history: {}, createdAt: Date.now(), ...extra };
     patch('habits', (hs) => [...hs, h]);
   },
   renameHabit(id: string, name: string) {
     patch('habits', (hs) => hs.map((h) => (h.id === id ? { ...h, name } : h)));
   },
-  toggleHabit(id: string, date = today()) {
-    patch('habits', (hs) => hs.map((h) => (h.id === id ? { ...h, history: { ...h.history, [date]: !h.history[date] } } : h)));
+  /** Tap a habit for a day: yes / no flips, counted habits go up one (or down with -1). */
+  toggleHabit(id: string, date = today(), delta: 1 | -1 = 1) {
+    patch('habits', (hs) => hs.map((h) => (h.id === id ? { ...h, history: { ...h.history, [date]: bump(h, date, delta) } } : h)));
+  },
+  updateHabit(id: string, p: Partial<Pick<Habit, 'name' | 'days' | 'target'>>) {
+    patch('habits', (hs) => hs.map((h) => (h.id === id ? { ...h, ...p } : h)));
   },
   removeHabit(id: string) {
     patch('habits', (hs) => hs.filter((h) => h.id !== id));
@@ -443,6 +474,21 @@ export const actions = {
     return () => job && patch('jobs', (all) => [...all.slice(0, index), job, ...all.slice(index)]);
   },
 
+  addPage(p: Partial<NotePage> = {}): NotePage {
+    const page: NotePage = { id: uid(), title: '', body: '', updatedAt: Date.now(), ...p };
+    patch('pages', (ps) => [page, ...ps]);
+    return page;
+  },
+  updatePage(id: string, p: Partial<NotePage>) {
+    patch('pages', (ps) => ps.map((x) => (x.id === id ? { ...x, ...p, id, updatedAt: Date.now() } : x)));
+  },
+  removePage(id: string) {
+    const ps = getState().pages;
+    const index = ps.findIndex((x) => x.id === id);
+    const page = ps[index];
+    patch('pages', (all) => all.filter((x) => x.id !== id));
+    return () => page && patch('pages', (all) => [...all.slice(0, index), page, ...all.slice(index)]);
+  },
   setNotes(notes: string) {
     setState((s) => ({ ...s, notes }));
   },
@@ -452,9 +498,27 @@ export const actions = {
   setReflection(p: Partial<State['reflection']>) {
     patch('reflection', (v) => ({ ...v, ...p }));
   },
-  logFocus(minutes: number) {
+  setWeek(week: State['week']) {
+    setState((s) => ({ ...s, week }));
+  },
+  toggleWeekGoal(id: string) {
+    setState((s) => (s.week ? { ...s, week: { ...s.week, goals: s.week.goals.map((g) => (g.id === id ? { ...g, done: !g.done } : g)) } } : s));
+  },
+  /** Log a finished focus session, credited to the task (or the #1 priority) it was for. */
+  logFocus(minutes: number, taskId?: string) {
     const d = today();
-    patch('focus', (f) => ({ ...f, [d]: { minutes: (f[d]?.minutes ?? 0) + minutes, sessions: (f[d]?.sessions ?? 0) + 1 } }));
+    const s = getState();
+    const task = taskId && taskId !== 'priority' ? s.tasks.find((t) => t.id === taskId) : undefined;
+    const title = taskId === 'priority' ? s.priority.title : task?.title;
+    patch('focus', (f) => {
+      const day = f[d] ?? { minutes: 0, sessions: 0 };
+      const items = { ...day.items };
+      if (taskId && title) {
+        const prev = items[taskId];
+        items[taskId] = { title, minutes: (prev?.minutes ?? 0) + minutes, ...(task?.projectId ? { projectId: task.projectId } : {}) };
+      }
+      return { ...f, [d]: { minutes: day.minutes + minutes, sessions: day.sessions + 1, ...(Object.keys(items).length ? { items } : {}) } };
+    });
   },
   setSettings(p: Partial<Settings>) {
     patch('settings', (v) => ({ ...v, ...p }));

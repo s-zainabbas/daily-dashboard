@@ -1,4 +1,4 @@
-import { Coffee, Pause, Play, RotateCcw, Timer } from 'lucide-react';
+import { Coffee, Maximize2, Pause, Play, RotateCcw, Timer } from 'lucide-react';
 import { formatDuration, today } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
@@ -32,6 +32,10 @@ export function Focus() {
       title="Focus"
       icon={<Timer size={16} />}
       actions={
+        <>
+        <button className="icon-btn sm" onClick={() => window.dispatchEvent(new Event('dd:focus-mode'))} aria-label="Full-screen focus (Shift+F)" title="Full-screen focus (⇧F)">
+          <Maximize2 size={14} />
+        </button>
         <Segmented
           label="Timer mode"
           value={timer.mode}
@@ -41,6 +45,7 @@ export function Focus() {
             { value: 'break', label: <Coffee size={13} aria-label="Break" /> },
           ]}
         />
+        </>
       }
     >
       <div className="focus-dial">

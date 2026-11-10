@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { actions, getState } from './store';
+import { actions, demoMode, getState } from './store';
 
 export type TimerMode = 'focus' | 'break';
 export interface TimerState {
@@ -17,6 +17,7 @@ const listeners = new Set<() => void>();
 const lengthOf = (mode: TimerMode) => (mode === 'focus' ? getState().settings.focusMinutes : getState().settings.breakMinutes) * 60_000;
 
 function load(): TimerState {
+  if (demoMode) return { mode: 'focus', remaining: lengthOf('focus') }; // the sample day never touches your timer
   try {
     const t = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (t && (t.mode === 'focus' || t.mode === 'break')) return t;
@@ -30,6 +31,10 @@ let timer: TimerState = load();
 
 function set(next: TimerState) {
   timer = next;
+  if (demoMode) {
+    listeners.forEach((l) => l());
+    return;
+  }
   try {
     localStorage.setItem(KEY, JSON.stringify(timer));
   } catch {
@@ -74,7 +79,7 @@ export const timerActions = {
 export function tick(onComplete: (mode: TimerMode) => void) {
   if (!timer.endsAt || Date.now() < timer.endsAt) return;
   const finished = timer.mode;
-  if (finished === 'focus') actions.logFocus(getState().settings.focusMinutes);
+  if (finished === 'focus') actions.logFocus(getState().settings.focusMinutes, timer.taskId);
   const next: TimerMode = finished === 'focus' ? 'break' : 'focus';
   set({ mode: next, remaining: lengthOf(next), taskId: timer.taskId });
   onComplete(finished);

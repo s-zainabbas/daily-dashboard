@@ -3,7 +3,8 @@ import { addDays, today } from './date';
 import { CALENDAR_SCOPE, currentToken, googleConfigured, requestToken, tokenHasScope } from './google/auth';
 import { CalendarError, listCalendars, listEvents, toShown, type GCalendar, type ShownEvent } from './google/calendar';
 import { useStore } from './store';
-import type { CalEvent } from './types';
+import type { CalEvent, JobApplication } from './types';
+import { interviewEvents } from './jobs';
 
 /**
  * Google Calendar on the dashboard: read-only, per device. Events are fetched from Google,
@@ -135,15 +136,18 @@ export function isChosen(v: GcalView, id: string) {
 /** Your own events plus the Google ones, for everything that shows events. */
 export function useAllEvents(): ShownEvent[] {
   const own = useStore((s) => s.events);
+  const jobs = useStore((s) => s.jobs);
   const g = useGcal();
-  return mergeEvents(own, g.enabled ? g.events : []);
+  return mergeEvents(own, g.enabled ? g.events : [], jobs);
 }
 
-let memo: { own: CalEvent[]; google: ShownEvent[]; out: ShownEvent[] } | undefined;
-export function mergeEvents(own: CalEvent[], google: ShownEvent[]): ShownEvent[] {
-  if (memo && memo.own === own && memo.google === google) return memo.out;
-  const out = google.length ? [...own, ...google] : own;
-  memo = { own, google, out };
+let memo: { own: CalEvent[]; google: ShownEvent[]; jobs?: JobApplication[]; out: ShownEvent[] } | undefined;
+/** Your events, then interviews from Jobs, then Google Calendar. */
+export function mergeEvents(own: CalEvent[], google: ShownEvent[], jobs?: JobApplication[]): ShownEvent[] {
+  if (memo && memo.own === own && memo.google === google && memo.jobs === jobs) return memo.out;
+  const interviews = jobs ? interviewEvents(jobs) : [];
+  const out = google.length || interviews.length ? [...own, ...interviews, ...google] : own;
+  memo = { own, google, jobs, out };
   return out;
 }
 

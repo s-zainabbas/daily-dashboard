@@ -29,3 +29,16 @@ describe('undo', () => {
     expect(getState().tasks.find((t) => t.title === 'three')!.done).toBe(true);
   });
 });
+
+describe('reorder', () => {
+  beforeEach(() => replaceState(emptyState()));
+  it('sets the order and can move the dragged task to another day', () => {
+    const a = actions.addTask({ title: 'a' });
+    const b = actions.addTask({ title: 'b', dueDate: '2030-01-01' });
+    actions.reorderTasks([b.id, a.id], { id: b.id, patch: { dueDate: undefined } });
+    const byId = Object.fromEntries(getState().tasks.map((t) => [t.title, t]));
+    expect(byId.b).toMatchObject({ order: 0 });
+    expect(byId.b.dueDate).toBeUndefined();
+    expect(byId.a.order).toBe(1);
+  });
+});

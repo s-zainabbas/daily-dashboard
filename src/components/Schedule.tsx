@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, MapPin, RefreshCw, StickyNote, Trash2 } from 'lucide-react';
 import { addDays, dateKey, formatDuration, formatTime, fromKey, fromMinutes, nowMinutes, toMinutes, today } from '../lib/date';
 import { useNow } from '../lib/hooks';
-import { actions, useStore } from '../lib/store';
+import { actions, getState, useStore } from '../lib/store';
 import { connectCalendar, refreshCalendar, useAllEvents, useGcal } from '../lib/gcal';
 import type { ShownEvent } from '../lib/google/calendar';
 import { useDriveSync } from '../lib/sync/driveSync';
@@ -31,6 +31,18 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
   const use24h = useStore((s) => s.settings.use24h);
   const [day, setDay] = useState(today);
   const [editing, setEditing] = useState<CalEvent | 'new' | null>(null);
+  // Search can open one of your events: jump to its day and open it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const ev = getState().events.find((x) => x.id === (e as CustomEvent<string>).detail);
+      if (!ev) return;
+      setDay(ev.date);
+      setEditing(ev);
+    };
+    window.addEventListener('dd:open-event', on);
+    return () => window.removeEventListener('dd:open-event', on);
+  }, []);
+
   // E / the command menu ask for a new event. Also runs on mount, after switching to a tab that has this panel.
   useEffect(() => {
     if (!editRequest) return;
@@ -40,6 +52,11 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
 
   /** Your events open the editor; Google ones open in Google Calendar (they're read-only here). */
   const open = (e: ShownEvent) => {
+    if (e.jobId) {
+      location.hash = 'jobs';
+      setTimeout(() => window.dispatchEvent(new CustomEvent('dd:open-job', { detail: e.jobId })), 80);
+      return;
+    }
     if (!e.google) return setEditing(e);
     if (e.google.link) window.open(e.google.link, '_blank', 'noopener');
   };
@@ -231,13 +248,13 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
   );
 }
 
-function EventEditor({ event, defaultDate, onClose }: { event: CalEvent | 'new' | null; defaultDate: string; onClose: () => void }) {
+export function EventEditor({ event, defaultDate, defaultStart, onClose }: { event: CalEvent | 'new' | null; defaultDate: string; defaultStart?: string; onClose: () => void }) {
   const init = event && event !== 'new' ? event : undefined;
   const [form, setForm] = useState({ title: '', date: '', start: '', end: '', location: '', notes: '' });
   const [forEvent, setForEvent] = useState<unknown>(null);
   if (event !== forEvent) {
     setForEvent(event);
-    const next = Math.ceil(nowMinutes() / 30) * 30;
+    const next = defaultStart ? toMinutes(defaultStart) : Math.ceil(nowMinutes() / 30) * 30;
     setForm({
       title: init?.title ?? '',
       date: init?.date ?? defaultDate,

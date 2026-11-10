@@ -14,6 +14,8 @@ import {
   resolveConflicts,
   restoreDriveVersion,
   setAutoSync,
+  setStaySignedIn,
+  staySignedIn,
   syncNow,
   useDriveSync,
 } from '../lib/sync/driveSync';
@@ -216,6 +218,7 @@ export function DriveSyncSection() {
         </div>
         <Switch label="Automatic sync" checked={v.autoSync} onChange={setAutoSync} />
       </div>
+      <StaySignedInSetting />
       <div className="row sync-actions">
         <button className="btn ghost" onClick={() => connectGoogle('switch')}>
           <Repeat size={14} /> Switch account
@@ -228,6 +231,26 @@ export function DriveSyncSection() {
         </button>
       </div>
     </section>
+  );
+}
+
+function StaySignedInSetting() {
+  const [on, setOn] = useState(staySignedIn);
+  return (
+    <div className="setting">
+      <div>
+        <b>Stay signed in</b>
+        <small>Google’s sign-in lasts an hour. This renews it on your next click before it runs out (a Google window may flash for a second).</small>
+      </div>
+      <Switch
+        label="Stay signed in"
+        checked={on}
+        onChange={(v) => {
+          setOn(v);
+          setStaySignedIn(v);
+        }}
+      />
+    </div>
   );
 }
 

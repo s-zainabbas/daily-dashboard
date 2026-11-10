@@ -1,3 +1,4 @@
+import { mondayOf } from './week';
 import { addDays, fromMinutes, nowMinutes, today } from './date';
 import { emptyState, uid } from './store';
 import type { State } from './types';
@@ -42,17 +43,28 @@ export function demoState(name = 'Zain'): State {
     { id: uid(), name: 'Portfolio site', status: 'blocked', nextAction: 'Waiting on new headshots', details: '', progress: 85 },
   ];
   const hist = (pattern: string) => Object.fromEntries([...pattern].map((c, i) => [addDays(t, i - pattern.length + 1), c === '1']).filter(([, v]) => v));
+  const longAgo = now - 120 * 864e5;
+  // About 3 months of history so streaks and heatmaps have something to show.
+  const days90 = Array.from({ length: 90 }, (_, i) => addDays(t, -i));
+  const odds = (p: number, seed: number) => Object.fromEntries(days90.slice(1).filter((_, i) => ((i * 7919 + seed * 104729) % 100) / 100 < p).map((d) => [d, true]));
   s.habits = [
-    { id: uid(), name: 'Read 20 pages', history: hist('1101111111110'), createdAt: now },
-    { id: uid(), name: 'Workout', history: hist('1010110101101'), createdAt: now },
-    { id: uid(), name: 'No phone before 9', history: hist('0111111111111'), createdAt: now },
-    { id: uid(), name: 'Drink 2L water', history: hist('1111011111111'), createdAt: now },
+    { id: uid(), name: 'Read 20 pages', history: { ...odds(0.85, 1), ...hist('1101111111110') }, createdAt: longAgo },
+    { id: uid(), name: 'Gym', days: [1, 3, 5], history: Object.fromEntries(days90.slice(1).filter((d, i) => [1, 3, 5].includes(new Date(d + 'T12:00').getDay()) && i % 9 !== 4).map((d) => [d, true])), createdAt: longAgo },
+    { id: uid(), name: 'No phone before 9', history: { ...odds(0.7, 3), ...hist('0111111111111') }, createdAt: longAgo },
+    { id: uid(), name: 'Glasses of water', target: 8, history: { ...Object.fromEntries(days90.slice(1).map((d, i) => [d, 4 + ((i * 37) % 5)])), [t]: 5 }, createdAt: longAgo },
   ];
   s.notes = 'Ideas\n– Weekly “ship log” post for the team\n– Try time-boxing reviews to 30m\n\nRemember: ask Jordan about the conference budget.';
+  s.pages = [
+    { id: uid(), title: 'Ideas', body: '- Weekly **ship log** post for the team\n- Try time-boxing reviews to 30m\n\nRemember: ask Jordan about the conference budget.', pinned: true, updatedAt: now },
+    { id: uid(), title: 'Offsite packing list', body: '- [x] Laptop + charger\n- [ ] Passport\n- [ ] Slides on a USB stick\n- [ ] Rain jacket', updatedAt: now - 864e5 },
+    { id: uid(), title: 'Reading', body: '## To read\n- *Deep Work*, Cal Newport\n- https://www.paulgraham.com/makersschedule.html', updatedAt: now - 3 * 864e5 },
+  ];
   s.jobs = [
-    { id: uid(), url: 'https://job-boards.greenhouse.io/acme/jobs/1001', company: 'Acme', role: 'Senior Product Designer', location: 'Remote (US)', status: 'interview', appliedOn: addDays(t, -9), notes: 'Recruiter: Dana. Portfolio review Thursday 2pm.', createdAt: now },
+    { id: uid(), url: 'https://job-boards.greenhouse.io/acme/jobs/1001', company: 'Acme', role: 'Senior Product Designer', location: 'Remote (US)', status: 'interview', appliedOn: addDays(t, -9), notes: 'Portfolio review: bring 2 case studies.', contact: 'Dana (recruiter)', salary: '$150–170k', interviewAt: `${addDays(t, 2)}T14:00`, createdAt: now },
     { id: uid(), url: 'https://jobs.lever.co/northwind/2002', company: 'Northwind', role: 'Product Designer, Growth', location: 'New York, NY', status: 'applied', appliedOn: addDays(t, -1), createdAt: now },
     { id: uid(), url: 'https://www.linkedin.com/jobs/view/3003003003/', company: 'Globex', role: 'UX Designer', location: 'Austin, TX', status: 'applied', appliedOn: t, createdAt: now },
+    { id: uid(), url: 'https://boards.greenhouse.io/hooli/jobs/5005', company: 'Hooli', role: 'Senior UX Designer', location: 'Remote', status: 'applied', appliedOn: addDays(t, -12), createdAt: now },
+    { id: uid(), url: 'https://jobs.lever.co/umbrella/6006', company: 'Umbrella', role: 'Product Designer', location: 'London', status: 'offer', appliedOn: addDays(t, -30), salary: '£85k', createdAt: now },
     { id: uid(), url: 'https://jobs.ashbyhq.com/initech/4004', company: 'Initech', role: 'Design Lead', status: 'rejected', appliedOn: addDays(t, -21), createdAt: now },
   ];
   s.links = [
@@ -70,5 +82,43 @@ export function demoState(name = 'Zain'): State {
     { date: addDays(t, -2), shipped: 'Prototype for the new onboarding', slipped: '', carries: '', mood: 5, priority: 'Onboarding prototype', priorityDone: true, tasksDone: 8, focusMinutes: 100 },
     { date: addDays(t, -3), shipped: 'Mostly meetings', slipped: 'Deep work block got eaten by a fire drill', carries: '', mood: 2, priority: 'Write auth spec', priorityDone: false, tasksDone: 2, focusMinutes: 25 },
   ];
+  s.week = {
+    key: mondayOf(t),
+    reviewedOn: addDays(mondayOf(t), -1),
+    goals: [
+      { id: uid(), title: 'Ship onboarding to staging', done: false },
+      { id: uid(), title: 'Run 5 user tests', done: false },
+      { id: uid(), title: 'Gym 3 times', done: true },
+    ],
+  };
+  // Six more weeks of history, so Insights and the Journal have something to show.
+  const shippedIdeas = ['Wrote the weekly update', 'Cleared the review queue', 'Pairing session on the API', 'Finished the user interviews', 'Shipped two small fixes', 'Planned next sprint'];
+  const projectIds = s.projects.map((p) => p.id);
+  for (let i = 4; i <= 45; i++) {
+    const d = addDays(t, -i);
+    const weekday = new Date(d + 'T12:00').getDay();
+    const weekend = weekday === 0 || weekday === 6;
+    const seed = (i * 7919) % 97;
+    const minutes = weekend ? (seed % 3) * 25 : 25 * (1 + (seed % 5));
+    if (i > 6) s.focus[d] = { minutes, sessions: minutes / 25 };
+    const f = s.focus[d];
+    if (f && f.minutes && projectIds.length) {
+      const pid = projectIds[seed % projectIds.length];
+      const project = s.projects.find((p) => p.id === pid)!;
+      f.items = { [`demo-${pid}`]: { title: project.nextAction || project.name, minutes: Math.round(f.minutes * 0.6), projectId: pid } };
+    }
+    if (!weekend || seed % 2)
+      s.journal.push({
+        date: d,
+        shipped: shippedIdeas[seed % shippedIdeas.length],
+        slipped: seed % 4 === 0 ? 'Got pulled into meetings' : '',
+        carries: '',
+        mood: (((seed % 5) + (weekend ? 1 : 0)) % 5 + 1) as 1 | 2 | 3 | 4 | 5,
+        priority: shippedIdeas[(seed + 1) % shippedIdeas.length],
+        priorityDone: seed % 3 !== 0,
+        tasksDone: weekend ? seed % 3 : 2 + (seed % 7),
+        focusMinutes: f?.minutes ?? 0,
+      });
+  }
   return s;
 }

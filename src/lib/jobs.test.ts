@@ -58,3 +58,22 @@ describe('htmlToText', () => {
     expect(htmlToText(html)).toBe('About us\n\n• Design & build\n• Ship');
   });
 });
+
+import { interviewEvents, needsFollowUp } from './jobs';
+import type { JobApplication } from './types';
+
+describe('follow-ups and interviews', () => {
+  const job = (p: Partial<JobApplication>): JobApplication => ({ id: 'j', url: '', company: 'Acme', role: 'Designer', status: 'applied', appliedOn: '2026-11-01', createdAt: 0, ...p });
+  it('nudges a week after applying, or after the last follow-up', () => {
+    expect(needsFollowUp(job({}), '2026-11-07')).toBe(false);
+    expect(needsFollowUp(job({}), '2026-11-08')).toBe(true);
+    expect(needsFollowUp(job({ followedUpOn: '2026-11-06' }), '2026-11-10')).toBe(false);
+    expect(needsFollowUp(job({ status: 'interview' }), '2026-11-20')).toBe(false);
+  });
+  it('turns interviews into hour-long events', () => {
+    expect(interviewEvents([job({ interviewAt: '2026-11-12T14:30', contact: 'Dana' })])).toEqual([
+      { id: 'job:j', jobId: 'j', title: 'Interview: Designer at Acme', date: '2026-11-12', start: '14:30', end: '15:30', location: undefined, notes: 'With Dana' },
+    ]);
+    expect(interviewEvents([job({ interviewAt: '2026-11-12T14:30', status: 'rejected' })])).toEqual([]);
+  });
+});

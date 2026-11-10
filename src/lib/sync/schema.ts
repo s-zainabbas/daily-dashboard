@@ -23,9 +23,9 @@ export const APP_ID = 'daily-dashboard';
 const TOMBSTONE_DAYS = 90;
 
 /** Lists of records with ids. Journal and focus are keyed by date. */
-export const COLLECTIONS = ['tasks', 'events', 'projects', 'habits', 'links', 'jobs', 'journal', 'focus'] as const;
+export const COLLECTIONS = ['tasks', 'events', 'projects', 'habits', 'links', 'jobs', 'journal', 'focus', 'pages'] as const;
 /** Single values. */
-export const VALUES = ['notes', 'priority', 'reflection', 'settings', 'onboarded', 'lastActiveDate'] as const;
+export const VALUES = ['notes', 'priority', 'reflection', 'settings', 'onboarded', 'lastActiveDate', 'week'] as const;
 export type CollectionKey = (typeof COLLECTIONS)[number];
 export type ValueKey = (typeof VALUES)[number];
 
@@ -221,6 +221,7 @@ export function hasContent(s: State): boolean {
     s.projects.length > 0 ||
     s.habits.length > 0 ||
     s.jobs.length > 0 ||
+    s.pages.some((p) => p.body.trim() || p.title.trim()) ||
     s.journal.length > 0 ||
     Object.keys(s.focus).length > 0 ||
     !!s.notes.trim() ||
@@ -237,8 +238,9 @@ export function summarize(s: State): string {
     [s.habits.length, 'habit'],
     [s.jobs.length, 'job'],
     [s.journal.length, 'journal day'],
+    [s.pages.length, 'note'],
   ];
   const text = parts.filter(([n]) => n).map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`);
-  if (s.notes.trim()) text.push('notes');
+  if (s.notes.trim() && !s.pages.length) text.push('notes');
   return text.join(' · ') || 'Nothing yet';
 }

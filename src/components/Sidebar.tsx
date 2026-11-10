@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type LucideIcon, BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, ListTodo, NotebookPen, PanelLeftClose, PanelLeftOpen, Settings as Cog, Sun, Timer } from 'lucide-react';
+import { type LucideIcon, BarChart3, BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, ListTodo, NotebookPen, PanelLeftClose, PanelLeftOpen, Settings as Cog, Sun, Timer } from 'lucide-react';
 import { today } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
@@ -7,8 +7,9 @@ import { useAllEvents } from '../lib/gcal';
 import { remainingMs, useTimer } from '../lib/timer';
 import { fmtClock } from './Focus';
 import { todayTaskStats } from './Stats';
+import { needsFollowUp, upcomingInterviews } from '../lib/jobs';
 
-export type View = 'today' | 'tasks' | 'schedule' | 'projects' | 'jobs' | 'notes';
+export type View = 'today' | 'tasks' | 'schedule' | 'projects' | 'jobs' | 'notes' | 'journal' | 'insights';
 
 export const VIEWS: { id: View; label: string; Icon: LucideIcon }[] = [
   { id: 'today', label: 'Today', Icon: Sun },
@@ -17,6 +18,8 @@ export const VIEWS: { id: View; label: string; Icon: LucideIcon }[] = [
   { id: 'projects', label: 'Projects', Icon: Briefcase },
   { id: 'jobs', label: 'Jobs', Icon: BriefcaseBusiness },
   { id: 'notes', label: 'Notes', Icon: NotebookPen },
+  { id: 'journal', label: 'Journal', Icon: BookOpen },
+  { id: 'insights', label: 'Insights', Icon: BarChart3 },
 ];
 
 const VIEW_KEY = 'daily-dashboard:view';
@@ -89,7 +92,7 @@ function useBadges(): Partial<Record<View, { n: number; tone?: 'bad' }>> {
   const ts = todayTaskStats(tasks, t);
   const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const eventsLeft = events.filter((e) => e.date === t && (!e.start || (e.end ?? e.start) >= hm)).length;
-  const interviews = jobs.filter((j) => j.status === 'interview').length;
+  const interviews = upcomingInterviews(jobs, t).length + jobs.filter((j) => needsFollowUp(j, t)).length;
   return {
     today: ts.open ? { n: ts.open } : undefined,
     tasks: ts.overdue ? { n: ts.overdue, tone: 'bad' } : undefined,
@@ -112,12 +115,11 @@ function TimerPill({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function Sidebar({ view, onView, collapsed, onToggle, onJournal, onSettings }: {
+export function Sidebar({ view, onView, collapsed, onToggle, onSettings }: {
   view: View;
   onView: (v: View) => void;
   collapsed: boolean;
   onToggle: () => void;
-  onJournal: () => void;
   onSettings: () => void;
 }) {
   const badges = useBadges();
@@ -157,10 +159,7 @@ export function Sidebar({ view, onView, collapsed, onToggle, onJournal, onSettin
 
       <div className="side-foot">
         {running && <TimerPill onClick={() => onView('today')} />}
-        <button className="side-item" onClick={onJournal} data-tip="Journal · J">
-          <BookOpen size={18} />
-          <span className="side-label">Journal</span>
-        </button>
+
         <button className="side-item" onClick={onSettings} data-tip="Settings">
           <Cog size={18} />
           <span className="side-label">Settings</span>

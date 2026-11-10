@@ -116,3 +116,30 @@ describe('splitSteps', () => {
     expect(splitSteps('3 slides on pricing')).toEqual(['3 slides on pricing']);
   });
 });
+
+describe('parseQuick — estimates', () => {
+  it('reads how long a task will take', () => {
+    expect(parseQuick('Write report 2h', REF)).toEqual({ kind: 'task', title: 'Write report', estimate: 120 });
+    expect(parseQuick('Inbox ~30m tomorrow', REF)).toMatchObject({ title: 'Inbox', estimate: 30, date: '2026-11-07' });
+    expect(parseQuick('Deck 1h30 !high', REF)).toMatchObject({ title: 'Deck', estimate: 90, priority: 'high' });
+    expect(parseQuick('Review PRs for 45m', REF)).toMatchObject({ kind: 'task', title: 'Review PRs', estimate: 45 });
+    expect(parseQuick('Stretch 10 mins every day', REF)).toMatchObject({ title: 'Stretch', estimate: 10, repeat: { freq: 'daily' } });
+  });
+  it('a duration on an event is still its length, not an estimate', () => {
+    const p = parseQuick('Sync at 11am for 30m', REF);
+    expect(p).toMatchObject({ kind: 'event', end: '11:30' });
+    expect(p.estimate).toBeUndefined();
+  });
+  it('leaves other numbers alone', () => {
+    expect(parseQuick('Read 3 chapters', REF).estimate).toBeUndefined();
+    expect(parseQuick('Run 5k', REF).estimate).toBeUndefined();
+  });
+});
+
+describe('parseQuick — reminders', () => {
+  it('reads "remind 3pm" and keeps it a task', () => {
+    expect(parseQuick('Call mum remind 3pm', REF)).toEqual({ kind: 'task', title: 'Call mum', remindAt: '15:00' });
+    expect(parseQuick('Pay rent tomorrow remind me at 9:30', REF)).toMatchObject({ kind: 'task', date: '2026-11-07', remindAt: '09:30' });
+    expect(parseQuick('Gym every mon remind 7', REF)).toMatchObject({ remindAt: '19:00', repeat: { freq: 'weekly' } });
+  });
+});
