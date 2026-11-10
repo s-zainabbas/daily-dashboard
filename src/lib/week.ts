@@ -1,5 +1,5 @@
 import { addDays, fromKey } from './date';
-import type { DateKey, State } from './types';
+import type { DateKey, State, WeekGoal } from './types';
 
 /** The weekly review: which week it plans, and when to suggest it. */
 
@@ -11,8 +11,11 @@ export const targetWeek = (today: DateKey) => {
   return day === 0 || day === 6 ? addDays(mondayOf(today), 7) : mondayOf(today);
 };
 
+// One shared empty list, so store selectors get a stable value and React doesn't re-render forever.
+const NO_GOALS: WeekGoal[] = [];
+
 /** Goals for the week you're in, if you set any. */
-export const thisWeeksGoals = (s: State, today: DateKey) => (s.week?.key === mondayOf(today) ? s.week.goals : []);
+export const thisWeeksGoals = (s: State, today: DateKey): WeekGoal[] => (s.week?.key === mondayOf(today) ? s.week.goals : NO_GOALS);
 
 /** Friday from 3pm through Monday noon, until the review for that week is done. */
 export function reviewDue(s: State, now: Date, today: DateKey): boolean {
