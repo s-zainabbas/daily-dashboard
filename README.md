@@ -12,21 +12,26 @@ Offline-first and private: everything is stored in your browser. Optionally conn
 
 | | |
 |---|---|
+| **Sidebar with tabs** | Today, Tasks, Schedule, Projects, Jobs and Notes, with badges for what's waiting. Switch with `1`–`6`; `[` folds it to icons. Becomes a bottom tab bar on phones. **Today fits on one screen** on a laptop: long cards scroll inside themselves. |
+| **Plan my day** | Press `P` for a one-minute morning routine: sort out overdue tasks, pick today's tasks (with your free time from the calendar), set your #1 priority. Undo included. |
 | **Natural-language quick add** | Type `Call Sam tomorrow !high` or `Dentist fri 3-4pm`. A live preview shows what it understood: task or event, date, time, priority. |
 | **Today's #1 priority** | One thing that would make today a win, with a one-click "Focus on it". |
-| **Tasks** | Grouped into Overdue / Today / Upcoming / Anytime / Waiting on others. Priorities, projects, notes, undo on delete. |
+| **Tasks** | Grouped into Overdue / Today / Upcoming / Anytime / Waiting on others. Priorities, projects, notes, undo on delete. **Checklists**: break a task into steps (paste a list to add several) and tick them from the list. |
 | **Schedule** | Agenda with a "now" line, free-time gaps, a day-at-a-glance bar, and a peek at tomorrow. Browse other days. |
 | **Focus timer** | Pomodoro based on timestamps, so it stays accurate in background tabs and across reloads. Countdown in the tab title, chime, notification, daily focus log. |
 | **Habits** | 7-day grid with streaks that forgive an unticked "today". |
-| **Projects** | Status, progress and the single next action. |
+| **Projects** | Status, progress and the single next action. The Projects tab shows each project with its own task list; tasks added there are linked to it. |
 | **Jobs applied** | Paste a job link and it's saved with the company, position and location filled in. Track status (applied, interview, offer, rejected), add notes, and keep a copy of the job description in case the posting comes down before your interview. |
 | **End-of-day review → Journal** | Mood, what shipped, what slipped. At midnight the day is saved to a journal with your priority, tasks completed and focus time; "carry to tomorrow" becomes a task. |
+| **Quick links** | Your everyday sites as icons in the top bar. Edit them on the Notes tab. |
 | **Weather** | Local conditions with high/low and rain chance (Open-Meteo, no API key). |
 | **Command menu** | `⌘K` to run any action or complete a task by name. |
-| **Keyboard first** | `/` quick add · `N` task · `E` event · `F` focus · `J` journal · `T` theme · `?` all shortcuts |
+| **Keyboard first** | `/` quick add · `N` task · `E` event · `P` plan my day · `F` focus · `J` journal · `T` theme · `1`–`6` tabs · `?` all shortcuts |
 | **Themes** | Light, dark or system, with five accent colours. |
 | **Installable PWA** | Works offline; install it to your dock or home screen. |
 | **Google Drive sync** | Connect your Google account and the dashboard is saved to a hidden app folder in your own Drive. Edits sync a few seconds later; other devices pick them up when they open or come back online. Changes made on two devices are merged, and if the same thing was changed in both places you choose which to keep. Restore any recent version. |
+| **Google Calendar** | Your Google Calendar events show in Schedule, the "Next up" card and the sidebar, next to your own events, in each calendar's colour. Read-only and never copied into your data; click one to open it in Google Calendar. Choose which calendars to show in Settings. |
+| **Repeating tasks** | `Gym every mon wed fri`, `Pay rent monthly`, or set it in the task editor. Ticking one off adds the next; Undo and Skip included. |
 | **Backup** | Export / import JSON. Undo after import, reset or loading sample data. |
 
 ## Tech
@@ -49,6 +54,10 @@ legacy/         the original single-file version, kept for comparison
 ```
 
 ## Run it
+
+**On a Mac:** double-click **`Open Dashboard.command`** in this folder. It installs what's needed on first run, starts the dashboard and opens it in your browser. Keep the Terminal window open while you use it.
+
+Or from a terminal:
 
 ```bash
 npm install
@@ -73,6 +82,17 @@ Your data stays local first: every change saves on the device instantly, and the
 8. **Live site:** GitHub repo → **Settings → Secrets and variables → Actions → Variables** → new variable `VITE_GOOGLE_CLIENT_ID` = the Client ID. Push (or re-run the workflow) to redeploy.
 
 New origins can take a few minutes to start working. Then open **Settings → Google Drive sync → Connect Google Drive**.
+
+### Google Calendar (optional)
+
+Uses the same Google Cloud project and Client ID:
+
+1. ☰ → **APIs & Services → Library** → search *Google Calendar API* → **Enable**.
+2. **Google Auth Platform → Data Access → Add or remove scopes** → tick `.../auth/calendar.readonly` → **Update → Save**.
+   This one is a *sensitive* scope. While the app stays in *Testing* with you as a test user, no Google review is needed; Google just shows an "unverified app" notice on the permission screen, which you can continue past.
+3. In the dashboard: **Settings → Google Calendar → Connect Google Calendar**, then tick the calendars to show.
+
+Events from last week to two months ahead are fetched when the dashboard opens, every 5 minutes while it's open, and when you come back to the tab. They're cached on the device so they show offline. Like Drive sync, Google's sign-in lasts about an hour; after that the Schedule shows a **Reconnect** button. Code: `src/lib/google/calendar.ts` (API and event conversion), `src/lib/gcal.ts` (fetching, cache, merging), `src/components/CalendarSettings.tsx`.
 
 ### How it behaves
 

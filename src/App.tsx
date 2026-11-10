@@ -5,8 +5,10 @@ import { Focus, fmtClock } from './components/Focus';
 import { Habits } from './components/Habits';
 import { Jobs } from './components/Jobs';
 import { Onboarding } from './components/Onboarding';
+import { PlanDay, PlanPrompt } from './components/PlanDay';
 import { Links, Notes, Projects, Reflection } from './components/Panels';
 import { Priority } from './components/Priority';
+import { ProjectsView } from './components/ProjectsView';
 import { QuickAdd } from './components/QuickAdd';
 import { Schedule } from './components/Schedule';
 import { Stats } from './components/Stats';
@@ -14,12 +16,13 @@ import { Tasks } from './components/Tasks';
 import { TopBar } from './components/TopBar';
 import { DriveDialogs, syncStatus } from './components/DriveSync';
 import { useDriveSync } from './lib/sync/driveSync';
+import { Sidebar, VIEWS, useSidebarCollapsed, useView, type View } from './components/Sidebar';
 import { Toasts, toast } from './components/ui';
 import { isTyping, useNow, useResolvedTheme } from './lib/hooks';
 import { actions, demoMode, getState, migratedFromLegacy, onSaveError, useStore } from './lib/store';
 import { chime, remainingMs, tick, timerActions, useTimer } from './lib/timer';
 
-type Panel = 'palette' | 'journal' | 'settings' | 'shortcuts' | null;
+type Panel = 'palette' | 'journal' | 'settings' | 'shortcuts' | 'plan' | null;
 
 export default function App() {
   const onboarded = useStore((s) => s.onboarded);
@@ -27,8 +30,14 @@ export default function App() {
   const accent = useStore((s) => s.settings.accent);
   const resolved = useResolvedTheme(theme);
   const [panel, setPanel] = useState<Panel>(null);
-  const [taskReq, setTaskReq] = useState<{ n: number }>({ n: 0 });
-  const [eventReq, setEventReq] = useState<{ n: number }>({ n: 0 });
+  const [view, setView] = useView();
+  const [collapsed, toggleSidebar] = useSidebarCollapsed();
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // "Open the new task / event editor" requests. The panel clears them once it has opened the editor,
+  // so the request survives switching to a tab where that panel lives.
+  const [taskReq, setTaskReq] = useState(0);
+  const [eventReq, setEventReq] = useState(0);
   const quickRef = useRef<HTMLInputElement>(null);
   const timer = useTimer();
   const sync = useDriveSync();
@@ -83,13 +92,22 @@ export default function App() {
 
   const handlers = useMemo<PaletteHandlers>(
     () => ({
-      newTask: () => setTaskReq((r) => ({ n: r.n + 1 })),
-      newEvent: () => setEventReq((r) => ({ n: r.n + 1 })),
+      newTask: () => {
+        if (!TASK_VIEWS.includes(viewRef.current)) setView('tasks');
+        setTaskReq((n) => n + 1);
+      },
+      newEvent: () => {
+        if (!EVENT_VIEWS.includes(viewRef.current)) setView('schedule');
+        setEventReq((n) => n + 1);
+      },
+      go: (v) => setView(v),
+      plan: () => setPanel('plan'),
       journal: () => setPanel('journal'),
       settings: () => setPanel('settings'),
       shortcuts: () => setPanel('shortcuts'),
       quickAdd: () => quickRef.current?.focus(),
     }),
+    // setView only changes the URL hash, so it's safe to capture once.
     [],
   );
 
@@ -108,16 +126,24 @@ export default function App() {
         e: handlers.newEvent,
         f: timerActions.toggle,
         j: handlers.journal,
+        p: handlers.plan,
         '?': handlers.shortcuts,
+        '[': toggleSidebar,
         t: () => actions.setSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' }),
       };
+      const tab = VIEWS[Number(k) - 1];
+      if (tab && /^[1-9]$/.test(k)) {
+        e.preventDefault();
+        handlers.go(tab.id);
+        return;
+      }
       const fn = map[k] ?? map[k.toLowerCase()];
       if (fn) {
         e.preventDefault();
         fn();
       }
     },
-    [handlers],
+    [handlers, toggleSidebar],
   );
 
   useEffect(() => {
@@ -135,45 +161,125 @@ export default function App() {
           <a href="./">Start your own →</a>
         </div>
       )}
-      <div className="shell">
-        <TopBar onPalette={() => setPanel('palette')} onJournal={() => setPanel('journal')} onSettings={() => setPanel('settings')} />
-        <QuickAdd ref={quickRef} />
-        <Stats />
-        <main className="grid">
-          <div className="col col-a">
-            <Priority />
-            <Tasks editRequest={taskReq.n ? taskReq : undefined} />
-            <Reflection evening={evening} />
-          </div>
-          <div className="col col-b">
-            <Schedule editRequest={eventReq.n ? eventReq : undefined} />
-            <Projects />
-            <Jobs />
-            <Links />
-          </div>
-          <div className="col col-c">
-            <Focus />
-            <Habits />
-            <Notes />
-          </div>
-        </main>
-        <footer className="footer">
-          <span>{sync.account ? `Google Drive · ${syncStatus(sync).text.split(' — ')[0]}` : 'Saved on this device · works offline'}</span>
-          <div className="links-row">
-            <button onClick={() => setPanel('shortcuts')}>Shortcuts</button>
-            <button onClick={() => setPanel('journal')}>Journal</button>
-            <button onClick={() => setPanel('settings')}>Backup &amp; settings</button>
-          </div>
-        </footer>
+      <div className={`app ${collapsed ? 'side-collapsed' : ''} ${view === 'today' ? 'fit' : ''}`}>
+        <Sidebar view={view} onView={setView} collapsed={collapsed} onToggle={toggleSidebar} onJournal={() => setPanel('journal')} onSettings={() => setPanel('settings')} />
+        <div className="shell">
+          <TopBar onPalette={() => setPanel('palette')} onJournal={() => setPanel('journal')} onSettings={() => setPanel('settings')} />
+          <QuickAdd ref={quickRef} />
+          <ViewBody
+            key={view}
+            view={view}
+            evening={evening}
+            taskReq={taskReq}
+            eventReq={eventReq}
+            onTaskHandled={() => setTaskReq(0)}
+            onEventHandled={() => setEventReq(0)}
+            onPlan={handlers.plan}
+          />
+          <footer className="footer">
+            <span>{sync.account ? `Google Drive · ${syncStatus(sync).text.split(' — ')[0]}` : 'Saved on this device · works offline'}</span>
+            <div className="links-row">
+              <button onClick={() => setPanel('shortcuts')}>Shortcuts</button>
+              <button onClick={() => setPanel('journal')}>Journal</button>
+              <button onClick={() => setPanel('settings')}>Backup &amp; settings</button>
+            </div>
+          </footer>
+        </div>
       </div>
 
       <CommandPalette open={panel === 'palette'} onClose={close} h={handlers} />
       <Journal open={panel === 'journal'} onClose={close} />
       <SettingsDrawer open={panel === 'settings'} onClose={close} />
       <ShortcutsDialog open={panel === 'shortcuts'} onClose={close} />
+      <PlanDay open={panel === 'plan'} onClose={close} />
       <Onboarding open={!onboarded} />
       <DriveDialogs />
       <Toasts />
     </>
   );
+}
+
+/** Tabs that show the Tasks / Schedule panels, so N and E only switch tab when needed. */
+const TASK_VIEWS: View[] = ['today', 'tasks'];
+const EVENT_VIEWS: View[] = ['today', 'schedule'];
+
+function ViewBody({ view, evening, taskReq, eventReq, onTaskHandled, onEventHandled, onPlan }: {
+  view: View;
+  evening: boolean;
+  taskReq: number;
+  eventReq: number;
+  onTaskHandled: () => void;
+  onEventHandled: () => void;
+  onPlan: () => void;
+}) {
+  const tasks = <Tasks editRequest={taskReq} onRequestHandled={onTaskHandled} />;
+  const schedule = <Schedule editRequest={eventReq} onRequestHandled={onEventHandled} />;
+  const title = VIEWS.find((v) => v.id === view)?.label;
+
+  switch (view) {
+    case 'today':
+      return (
+        <>
+          <PlanPrompt onPlan={onPlan} />
+          <Stats />
+          <main className="grid">
+            <div className="col col-a">
+              <Priority />
+              <Tasks editRequest={taskReq} onRequestHandled={onTaskHandled} todayOnly />
+            </div>
+            <div className="col col-b">
+              {schedule}
+              {/* The review only matters at the end of the day; it's always on the Schedule tab. */}
+              {evening && <Reflection evening />}
+            </div>
+            <div className="col col-c">
+              <Focus />
+              <Habits />
+            </div>
+          </main>
+        </>
+      );
+    case 'tasks':
+      return (
+        <main className="view-split" aria-label={title}>
+          <div className="col">{tasks}</div>
+          <div className="col">
+            <Priority />
+            <Projects />
+          </div>
+        </main>
+      );
+    case 'schedule':
+      return (
+        <main className="view-split" aria-label={title}>
+          <div className="col">{schedule}</div>
+          <div className="col">
+            <Focus />
+            <Reflection evening={evening} />
+          </div>
+        </main>
+      );
+    case 'projects':
+      return (
+        <ProjectsView />
+      );
+    case 'jobs':
+      return (
+        <main className="view-full view-jobs" aria-label={title}>
+          <Jobs />
+        </main>
+      );
+    case 'notes':
+      return (
+        <main className="view-split view-notes" aria-label={title}>
+          <div className="col">
+            <Notes />
+          </div>
+          <div className="col">
+            <Links />
+            <Habits />
+          </div>
+        </main>
+      );
+  }
 }

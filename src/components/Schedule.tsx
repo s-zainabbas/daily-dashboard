@@ -1,24 +1,48 @@
-import { Fragment, useMemo, useState } from 'react';
-import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, MapPin, StickyNote, Trash2 } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, MapPin, RefreshCw, StickyNote, Trash2 } from 'lucide-react';
 import { addDays, dateKey, formatDuration, formatTime, fromKey, fromMinutes, nowMinutes, toMinutes, today } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { actions, useStore } from '../lib/store';
+import { connectCalendar, refreshCalendar, useAllEvents, useGcal } from '../lib/gcal';
+import type { ShownEvent } from '../lib/google/calendar';
+import { useDriveSync } from '../lib/sync/driveSync';
 import type { CalEvent } from '../lib/types';
 import { Card, Dialog, DialogHead, Empty, toast } from './ui';
 
 const endOf = (e: CalEvent) => (e.end ? toMinutes(e.end) : toMinutes(e.start!) + 30);
 
-export function Schedule({ editRequest }: { editRequest?: { n: number } }) {
+const evColor = (e: ShownEvent) => (e.google?.color ? ({ borderLeftColor: e.google.color } as const) : undefined);
+
+function GoogleTag({ e }: { e: ShownEvent }) {
+  return (
+    <div className="ev-sub gcal-tag">
+      <span>
+        <i style={{ background: e.google!.color ?? 'var(--accent)' }} /> {e.google!.calendar} <ExternalLink size={10} />
+      </span>
+    </div>
+  );
+}
+
+export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: number; onRequestHandled?: () => void }) {
   const now = useNow(30_000);
-  const events = useStore((s) => s.events);
+  const events = useAllEvents();
+  const gcal = useGcal();
+  const account = useDriveSync().account;
   const use24h = useStore((s) => s.settings.use24h);
   const [day, setDay] = useState(today);
   const [editing, setEditing] = useState<CalEvent | 'new' | null>(null);
-  const [lastReq, setLastReq] = useState(0);
-  if (editRequest && editRequest.n !== lastReq) {
-    setLastReq(editRequest.n);
+  // E / the command menu ask for a new event. Also runs on mount, after switching to a tab that has this panel.
+  useEffect(() => {
+    if (!editRequest) return;
     setEditing('new');
-  }
+    onRequestHandled?.();
+  }, [editRequest, onRequestHandled]);
+
+  /** Your events open the editor; Google ones open in Google Calendar (they're read-only here). */
+  const open = (e: ShownEvent) => {
+    if (!e.google) return setEditing(e);
+    if (e.google.link) window.open(e.google.link, '_blank', 'noopener');
+  };
 
   const t = dateKey(now);
   const isToday = day === t;
@@ -46,6 +70,18 @@ export function Schedule({ editRequest }: { editRequest?: { n: number } }) {
   const dayTitle = isToday ? 'Today' : day === addDays(t, 1) ? 'Tomorrow' : day === addDays(t, -1) ? 'Yesterday' : fromKey(day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
   let nowShown = !isToday;
+
+  // When the card scrolls inside itself (Today tab), start at what's happening now rather than at 8am.
+  const agendaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const agenda = agendaRef.current;
+    const card = agenda?.closest('section');
+    const target = agenda?.querySelector<HTMLElement>('.ev.now, .now-line');
+    if (!card || !target || card.scrollHeight <= card.clientHeight) return;
+    const head = card.querySelector<HTMLElement>('.card-head')?.offsetHeight ?? 0;
+    card.scrollTop = target.getBoundingClientRect().top - card.getBoundingClientRect().top + card.scrollTop - head - 8;
+  }, [day, timed.length]);
+
   return (
     <Card
       title="Schedule"
@@ -70,6 +106,22 @@ export function Schedule({ editRequest }: { editRequest?: { n: number } }) {
         </>
       }
     >
+      {gcal.enabled && (gcal.status === 'needs-auth' || gcal.status === 'error') && (
+        <div className="gcal-alert" role="status">
+          <span>{gcal.status === 'needs-auth' ? 'Google Calendar needs you to sign in again.' : gcal.error ?? 'Couldn’t load Google Calendar.'}</span>
+          {gcal.status === 'error' && gcal.errorLink && (
+            <a className="btn sm ghost" href={gcal.errorLink} target="_blank" rel="noopener noreferrer">
+              Turn it on <ExternalLink size={12} />
+            </a>
+          )}
+          <button
+            className="btn sm ghost"
+            onClick={() => (gcal.status === 'needs-auth' ? connectCalendar(account?.email) : refreshCalendar(true))}
+          >
+            <RefreshCw size={13} /> {gcal.status === 'needs-auth' ? 'Reconnect' : 'Retry'}
+          </button>
+        </div>
+      )}
       <div className="daybar" aria-hidden>
         <div className="daybar-track">
           {isToday && <div className="daybar-past" style={{ width: pct(m) }} />}
@@ -77,7 +129,7 @@ export function Schedule({ editRequest }: { editRequest?: { n: number } }) {
             <div
               key={e.id}
               className={`daybar-ev ${endOf(e) <= m ? 'past' : ''}`}
-              style={{ left: pct(toMinutes(e.start!)), width: `calc(${pct(endOf(e))} - ${pct(toMinutes(e.start!))})` }}
+              style={{ ...(e.google?.color && endOf(e) > m ? { background: e.google.color } : {}), left: pct(toMinutes(e.start!)), width: `calc(${pct(endOf(e))} - ${pct(toMinutes(e.start!))})` }}
               title={e.title}
             />
           ))}
@@ -95,12 +147,13 @@ export function Schedule({ editRequest }: { editRequest?: { n: number } }) {
           Type “Lunch with Ana at 1pm” in quick add, or press E.
         </Empty>
       ) : (
-        <div className="agenda">
+        <div className="agenda" ref={agendaRef}>
           {allDay.map((e) => (
-            <button key={e.id} className="ev" onClick={() => setEditing(e)}>
+            <button key={e.id} className="ev" onClick={() => open(e)} title={e.google ? `${e.google.calendar} · opens in Google Calendar` : undefined}>
               <div className="ev-time">All day</div>
-              <div className="ev-body">
+              <div className="ev-body" style={evColor(e)}>
                 <div className="ev-title">{e.title}</div>
+                {e.google && <GoogleTag e={e} />}
                 {e.location && (
                   <div className="ev-sub">
                     <span>
@@ -125,13 +178,14 @@ export function Schedule({ editRequest }: { editRequest?: { n: number } }) {
               <Fragment key={e.id}>
                 {gap >= 30 && !past && !showNow && <div className="gap-row">{formatDuration(gap)} free</div>}
                 {showNow && <div className="now-line num">Now · {fmt(fromMinutes(m))}</div>}
-                <button className={`ev ${past ? 'past' : ''} ${live ? 'now' : ''}`} onClick={() => setEditing(e)}>
+                <button className={`ev ${past ? 'past' : ''} ${live ? 'now' : ''}`} onClick={() => open(e)} title={e.google ? `${e.google.calendar} · opens in Google Calendar` : undefined}>
                   <div className="ev-time num">
                     {fmt(e.start!)}
                     {e.end && <small>{fmt(e.end)}</small>}
                   </div>
-                  <div className="ev-body">
+                  <div className="ev-body" style={evColor(e)}>
                     <div className="ev-title">{e.title}</div>
+                    {e.google && <GoogleTag e={e} />}
                     {(e.location || e.notes) && (
                       <div className="ev-sub">
                         {e.location && (

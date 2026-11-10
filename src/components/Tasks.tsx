@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Check, CheckCircle2, Folder, Hourglass, ListTodo, Pencil, Play, Plus, Star, Trash2 } from 'lucide-react';
-import { dateKey, dueLabel, today } from '../lib/date';
-import { actions, useStore } from '../lib/store';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, CheckCircle2, ChevronDown, Folder, ListChecks, X, Hourglass, ListTodo, Pencil, Play, Plus, Repeat as RepeatIcon, SkipForward, Star, Trash2 } from 'lucide-react';
+import { dateKey, dueLabel, dueLabelInline, fromKey, today } from '../lib/date';
+import { parseQuick, splitSteps } from '../lib/parse';
+import { anchored, DAY_SHORT, firstDue, MON_FIRST, nextDue, repeatLabel } from '../lib/repeat';
+import { actions, uid, useStore } from '../lib/store';
 import { timerActions } from '../lib/timer';
-import type { Priority, Task } from '../lib/types';
+import type { Priority, Repeat, RepeatFreq, Subtask, Task } from '../lib/types';
 import { Card, Dialog, DialogHead, Empty, Segmented, toast } from './ui';
 
 type Filter = 'all' | 'today' | 'upcoming' | 'waiting';
@@ -20,23 +22,34 @@ function readFilter(): Filter {
   }
 }
 
-export function Tasks({ editRequest }: { editRequest?: { id?: string; n: number } }) {
-  const tasks = useStore((s) => s.tasks);
+export function Tasks({ editRequest = 0, onRequestHandled, todayOnly = false, projectId }: {
+  editRequest?: number;
+  onRequestHandled?: () => void;
+  /** On the Today tab: just overdue and today's tasks, with a link to the full list. */
+  todayOnly?: boolean;
+  /** Only this project's tasks; new tasks are added to it. */
+  projectId?: string;
+}) {
+  const allTasks = useStore((s) => s.tasks);
+  const tasks = useMemo(() => (projectId ? allTasks.filter((t) => t.projectId === projectId) : allTasks), [allTasks, projectId]);
   const projects = useStore((s) => s.projects);
-  const [filter, setFilterState] = useState<Filter>(readFilter);
+  // A project's own list starts on "All" and doesn't change the main Tasks filter.
+  const [savedFilter, setFilterState] = useState<Filter>(() => (projectId ? 'all' : readFilter()));
+  const filter: Filter = todayOnly ? 'today' : savedFilter;
   const [showDone, setShowDone] = useState(true);
   const [editing, setEditing] = useState<Task | 'new' | null>(null);
-  const [lastReq, setLastReq] = useState(0);
   const t = today();
 
-  // Allow the command palette to open the editor.
-  if (editRequest && editRequest.n !== lastReq) {
-    setLastReq(editRequest.n);
-    setEditing(editRequest.id ? tasks.find((x) => x.id === editRequest.id) ?? null : 'new');
-  }
+  // N / the command menu ask for a new task. Also runs on mount, after switching to a tab that has this panel.
+  useEffect(() => {
+    if (!editRequest) return;
+    setEditing('new');
+    onRequestHandled?.();
+  }, [editRequest, onRequestHandled]);
 
   const setFilter = (f: Filter) => {
     setFilterState(f);
+    if (projectId) return;
     try {
       localStorage.setItem(FILTER_KEY, f);
     } catch {
@@ -84,14 +97,26 @@ export function Tasks({ editRequest }: { editRequest?: { id?: string; n: number 
     <Card
       title="Tasks"
       icon={<ListTodo size={16} />}
-      meta={`${groups.overdue.length + groups.dueToday.length + groups.upcoming.length + groups.someday.length} open`}
+      meta={
+        todayOnly
+          ? `${groups.overdue.length + groups.dueToday.length} for today`
+          : `${groups.overdue.length + groups.dueToday.length + groups.upcoming.length + groups.someday.length} open`
+      }
       actions={
-        <button className="icon-btn sm" onClick={() => setEditing('new')} aria-label="New task" title="New task">
-          <Plus size={16} />
-        </button>
+        <>
+          {todayOnly && (
+            <a className="btn sm ghost" href="#tasks">
+              All tasks →
+            </a>
+          )}
+          <button className="icon-btn sm" onClick={() => setEditing('new')} aria-label="New task" title="New task">
+            <Plus size={16} />
+          </button>
+        </>
       }
     >
-      <div className="task-tools">
+      {!todayOnly && (
+        <div className="task-tools">
         <Segmented
           label="Filter tasks"
           value={filter}
@@ -103,11 +128,18 @@ export function Tasks({ editRequest }: { editRequest?: { id?: string; n: number 
             { value: 'waiting', label: 'Waiting', count: groups.waiting.length },
           ]}
         />
-      </div>
+        </div>
+      )}
 
       {visible.length === 0 && done.length === 0 ? (
-        <Empty icon={<CheckCircle2 size={28} />} title={filter === 'waiting' ? 'Nothing blocked on anyone' : 'Nothing here'}>
-          {filter === 'waiting' ? 'Add a task and set “waiting on” to track hand-offs.' : 'Use the quick-add bar above, or press N.'}
+        <Empty icon={<CheckCircle2 size={28} />} title={filter === 'waiting' ? 'Nothing blocked on anyone' : todayOnly ? 'Nothing due today' : 'Nothing here'}>
+          {filter === 'waiting'
+            ? 'Add a task and set “waiting on” to track hand-offs.'
+            : todayOnly
+              ? 'Press P to plan your day, or pull something in from All tasks.'
+              : projectId
+                ? 'No tasks in this project yet. Add the first one below.'
+                : 'Use the quick-add bar above, or press N.'}
         </Empty>
       ) : (
         <div className="task-list">
@@ -115,7 +147,7 @@ export function Tasks({ editRequest }: { editRequest?: { id?: string; n: number 
             <div key={s.title}>
               {(visible.length > 1 || filter === 'all') && <div className="task-section">{s.title}</div>}
               {s.items.map((x) => (
-                <TaskRow key={x.id} task={x} project={projectName(x.projectId)} onEdit={() => setEditing(x)} />
+                <TaskRow key={x.id} task={x} project={projectId ? undefined : projectName(x.projectId)} onEdit={() => setEditing(x)} />
               ))}
             </div>
           ))}
@@ -127,22 +159,22 @@ export function Tasks({ editRequest }: { editRequest?: { id?: string; n: number 
                 {filter === 'all' && showDone && (
                   <button
                     onClick={() => {
-                      const before = tasks;
-                      actions.clearCompleted();
-                      toast('Cleared completed tasks', { label: 'Undo', run: () => before.filter((x) => x.done).forEach((x) => actions.addTask(x)) });
+                      const undo = actions.clearCompleted();
+                      toast('Cleared completed tasks', { label: 'Undo', run: undo });
                     }}
                   >
                     Clear
                   </button>
                 )}
               </div>
-              {showDone && done.map((x) => <TaskRow key={x.id} task={x} project={projectName(x.projectId)} onEdit={() => setEditing(x)} />)}
+              {showDone && done.map((x) => <TaskRow key={x.id} task={x} project={projectId ? undefined : projectName(x.projectId)} onEdit={() => setEditing(x)} />)}
             </div>
           )}
         </div>
       )}
 
-      <TaskEditor task={editing} onClose={() => setEditing(null)} />
+      {projectId && <ProjectQuickAdd projectId={projectId} />}
+      <TaskEditor task={editing} onClose={() => setEditing(null)} defaultProjectId={projectId} />
     </Card>
   );
 }
@@ -150,6 +182,9 @@ export function Tasks({ editRequest }: { editRequest?: { id?: string; n: number 
 function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEdit: () => void }) {
   const t = today();
   const overdue = !task.done && task.dueDate && task.dueDate < t;
+  const steps = task.subtasks ?? [];
+  const stepsDone = steps.filter((x) => x.done).length;
+  const [open, setOpen] = useState(false);
   return (
     <div className={`task ${task.done ? 'done' : ''}`}>
       <button
@@ -158,16 +193,36 @@ function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEd
         role="checkbox"
         aria-checked={task.done}
         aria-label={`Mark “${task.title}” ${task.done ? 'not done' : 'done'}`}
-        onClick={() => actions.toggleTask(task.id)}
+        onClick={() => {
+          const next = actions.toggleTask(task.id);
+          if (next?.dueDate) toast(`Done · next one ${dueLabelInline(next.dueDate)}`, { label: 'Undo', run: () => actions.toggleTask(task.id) });
+        }}
       >
         <Check size={13} strokeWidth={3} />
       </button>
       <div className="task-title" onDoubleClick={onEdit}>
         <p>{task.title}</p>
-        {(task.dueDate || task.waitingOn || project || task.priority === 'high') && !task.done && (
+        {(task.dueDate || task.waitingOn || project || task.repeat || steps.length > 0 || task.priority === 'high') && !task.done && (
           <div className="task-meta">
+            {steps.length > 0 && (
+              <button
+                type="button"
+                className={`chip steps-chip ${stepsDone === steps.length ? 'accent' : ''}`}
+                aria-expanded={open}
+                aria-label={`${stepsDone} of ${steps.length} steps done. ${open ? 'Hide' : 'Show'} steps`}
+                onClick={() => setOpen((v) => !v)}
+              >
+                <ListChecks size={11} /> <span className="num">{stepsDone}/{steps.length}</span>
+                <ChevronDown size={11} className={open ? 'flip' : ''} />
+              </button>
+            )}
             {task.priority === 'high' && <span className="chip high">High</span>}
             {task.dueDate && <span className={`chip ${overdue ? 'overdue' : task.dueDate === t ? 'accent' : ''}`}>{dueLabel(task.dueDate)}</span>}
+            {task.repeat && (
+              <span className="chip" title="Repeats — the next one is added when you complete this">
+                <RepeatIcon size={10} /> {repeatLabel(task.repeat)}
+              </span>
+            )}
             {task.waitingOn && (
               <span className="chip">
                 <Hourglass size={10} /> {task.waitingOn}
@@ -180,6 +235,7 @@ function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEd
             )}
           </div>
         )}
+        {open && !task.done && <InlineSteps task={task} />}
       </div>
       <div className="task-actions">
         {!task.done && (
@@ -229,11 +285,11 @@ function TaskRow({ task, project, onEdit }: { task: Task; project?: string; onEd
   );
 }
 
-function TaskEditor({ task, onClose }: { task: Task | 'new' | null; onClose: () => void }) {
+function TaskEditor({ task, onClose, defaultProjectId }: { task: Task | 'new' | null; onClose: () => void; defaultProjectId?: string }) {
   const projects = useStore((s) => s.projects);
   const isNew = task === 'new';
   const init = task && task !== 'new' ? task : undefined;
-  const [form, setForm] = useState({ title: '', notes: '', dueDate: '', priority: 'med' as Priority, waitingOn: '', projectId: '' });
+  const [form, setForm] = useState({ title: '', notes: '', dueDate: '', priority: 'med' as Priority, waitingOn: '', projectId: '', freq: '' as RepeatFreq | '', interval: 1, days: [] as number[], subtasks: [] as Subtask[] });
   const [forTask, setForTask] = useState<unknown>(null);
   if (task !== forTask) {
     setForTask(task);
@@ -243,7 +299,11 @@ function TaskEditor({ task, onClose }: { task: Task | 'new' | null; onClose: () 
       dueDate: init?.dueDate ?? (isNew ? today() : ''),
       priority: init?.priority ?? 'med',
       waitingOn: init?.waitingOn ?? '',
-      projectId: init?.projectId ?? '',
+      projectId: init?.projectId ?? defaultProjectId ?? '',
+      freq: init?.repeat?.freq ?? '',
+      interval: init?.repeat?.interval ?? 1,
+      days: init?.repeat?.days ?? [],
+      subtasks: init?.subtasks ?? [],
     });
   }
   const set = (p: Partial<typeof form>) => setForm((f) => ({ ...f, ...p }));
@@ -251,10 +311,13 @@ function TaskEditor({ task, onClose }: { task: Task | 'new' | null; onClose: () 
   function save(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
+    const { repeat, dueDate } = buildRepeat(form, init);
     const data = {
       title: form.title.trim(),
       notes: form.notes.trim() || undefined,
-      dueDate: form.dueDate || undefined,
+      dueDate,
+      repeat,
+      subtasks: cleanSteps(form.subtasks),
       priority: form.priority,
       waitingOn: form.waitingOn.trim() || undefined,
       projectId: form.projectId || undefined,
@@ -308,9 +371,11 @@ function TaskEditor({ task, onClose }: { task: Task | 'new' | null; onClose: () 
             </select>
           </label>
         </div>
+        <ChecklistField steps={form.subtasks} onChange={(subtasks) => set({ subtasks })} />
+        <RepeatField form={form} set={set} />
         <label className="field">
           <span>Notes</span>
-          <textarea className="textarea" rows={3} value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="Links, context, sub-steps…" />
+          <textarea className="textarea" rows={3} value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="Links, context…" />
         </label>
         <div className="modal-foot">
           {init && (
@@ -326,6 +391,21 @@ function TaskEditor({ task, onClose }: { task: Task | 'new' | null; onClose: () 
               <Trash2 size={14} /> Delete
             </button>
           )}
+          {init?.repeat && !init.done && (
+            <button
+              type="button"
+              className="btn ghost"
+              title="Move this to the next date without completing it"
+              onClick={() => {
+                const before = init.dueDate;
+                const due = actions.skipTask(init.id);
+                if (due) toast(`Skipped · next one ${dueLabelInline(due)}`, { label: 'Undo', run: () => actions.updateTask(init.id, { dueDate: before }) });
+                onClose();
+              }}
+            >
+              <SkipForward size={14} /> Skip
+            </button>
+          )}
           <span className="spacer" />
           <button type="button" className="btn ghost" onClick={onClose}>
             Cancel
@@ -334,5 +414,260 @@ function TaskEditor({ task, onClose }: { task: Task | 'new' | null; onClose: () 
         </div>
       </form>
     </Dialog>
+  );
+}
+
+/* ---------- Repeat ---------- */
+
+type RepeatForm = { freq: RepeatFreq | ''; interval: number; days: number[]; dueDate: string };
+
+const FREQS: { value: RepeatFreq | ''; label: string; unit?: string }[] = [
+  { value: '', label: 'Doesn’t repeat' },
+  { value: 'daily', label: 'Daily', unit: 'day' },
+  { value: 'weekdays', label: 'Every weekday (Mon–Fri)' },
+  { value: 'weekly', label: 'Weekly', unit: 'week' },
+  { value: 'monthly', label: 'Monthly', unit: 'month' },
+  { value: 'yearly', label: 'Yearly', unit: 'year' },
+];
+
+/** Turn the editor's repeat fields into a rule, and pick a due date that fits it. */
+function buildRepeat(form: RepeatForm, init?: Task): { repeat?: Repeat; dueDate?: string } {
+  if (!form.freq) return { repeat: undefined, dueDate: form.dueDate || undefined };
+  const interval = Math.max(1, Math.min(99, Math.floor(form.interval) || 1));
+  let repeat: Repeat = { freq: form.freq };
+  if (interval > 1 && form.freq !== 'weekdays') repeat.interval = interval;
+  if (form.freq === 'weekly' && form.days.length) repeat.days = [...form.days].sort();
+  // A repeating task needs a date: start from the chosen one (or today) and move to the first day that fits.
+  const dueDate = firstDue(repeat, form.dueDate || today());
+  // Keep the monthly anchor (e.g. the 31st) unless the date or rule was changed.
+  const keepAnchor = init?.repeat?.monthDay && init.repeat.freq === form.freq && init.dueDate === form.dueDate;
+  repeat = keepAnchor ? { ...repeat, monthDay: init!.repeat!.monthDay } : anchored(repeat, dueDate);
+  return { repeat, dueDate };
+}
+
+function RepeatField({ form, set }: { form: RepeatForm; set: (p: Partial<RepeatForm>) => void }) {
+  const unit = FREQS.find((f) => f.value === form.freq)?.unit;
+  const preview = form.freq ? buildRepeat(form) : undefined;
+  const after = preview?.repeat && preview.dueDate ? nextDue(preview.repeat, preview.dueDate, preview.dueDate) : undefined;
+  const fmt = (d: string) => fromKey(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+  return (
+    <div className="field repeat-field">
+      <span>Repeat</span>
+      <div className="repeat-row">
+        <select
+          className="select input"
+          aria-label="Repeat"
+          value={form.freq}
+          onChange={(e) => {
+            const freq = e.target.value as RepeatFreq | '';
+            // Weekly starts on the due date's weekday, ready to add more days.
+            const days = freq === 'weekly' && !form.days.length ? [fromKey(form.dueDate || today()).getDay()] : form.days;
+            set({ freq, days });
+          }}
+        >
+          {FREQS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        {unit && (
+          <label className="repeat-every">
+            every
+            <input
+              className="input num"
+              type="number"
+              min={1}
+              max={99}
+              value={form.interval}
+              onChange={(e) => set({ interval: Number(e.target.value) })}
+              aria-label={`Number of ${unit}s between repeats`}
+            />
+            {unit}
+            {form.interval === 1 ? '' : 's'}
+          </label>
+        )}
+      </div>
+      {form.freq === 'weekly' && (
+        <div className="segmented repeat-days" role="group" aria-label="Repeat on">
+          {MON_FIRST.map((d) => (
+            <button
+              key={d}
+              type="button"
+              aria-pressed={form.days.includes(d)}
+              aria-label={DAY_SHORT[d]}
+              onClick={() => {
+                const days = form.days.includes(d) ? form.days.filter((x) => x !== d) : [...form.days, d];
+                if (days.length) set({ days });
+              }}
+            >
+              {DAY_SHORT[d].slice(0, 2)}
+            </button>
+          ))}
+        </div>
+      )}
+      {preview?.repeat && preview.dueDate && (
+        <small className="repeat-hint">
+          {repeatLabel(preview.repeat)} · this one {fmt(preview.dueDate)}
+          {after ? `, then ${fmt(after)}` : ''}. The next one appears when you tick this off.
+        </small>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Checklist ---------- */
+
+const cleanSteps = (steps: Subtask[]) => {
+  const out = steps.map((x) => ({ ...x, title: x.title.trim() })).filter((x) => x.title);
+  return out.length ? out : undefined;
+};
+
+/** Steps under a task in the list: tick them, remove them, or add more without opening the editor. */
+function InlineSteps({ task }: { task: Task }) {
+  const [draft, setDraft] = useState('');
+  const add = (text: string) => {
+    actions.addSubtasks(task.id, splitSteps(text));
+    setDraft('');
+  };
+  return (
+    <div className="steps" onDoubleClick={(e) => e.stopPropagation()}>
+      {(task.subtasks ?? []).map((x) => (
+        <div key={x.id} className={`step ${x.done ? 'done' : ''}`}>
+          <button
+            type="button"
+            className={`check sm ${x.done ? 'on' : ''}`}
+            role="checkbox"
+            aria-checked={x.done}
+            aria-label={`Mark step “${x.title}” ${x.done ? 'not done' : 'done'}`}
+            onClick={() => {
+              if (actions.toggleSubtask(task.id, x.id)) {
+                toast('All steps done', { label: 'Complete task', run: () => actions.toggleTask(task.id) }, 8000);
+              }
+            }}
+          >
+            <Check size={10} strokeWidth={3} />
+          </button>
+          <span>{x.title}</span>
+          <button type="button" className="step-x" aria-label={`Remove step “${x.title}”`} onClick={() => actions.removeSubtask(task.id, x.id)}>
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+      <input
+        className="step-add"
+        value={draft}
+        placeholder="Add a step…"
+        aria-label={`Add a step to “${task.title}”`}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') add(draft);
+          if (e.key === 'Escape') (setDraft(''), e.currentTarget.blur());
+        }}
+        onPaste={(e) => {
+          const text = e.clipboardData.getData('text');
+          if (text.includes('\n')) {
+            e.preventDefault();
+            add(text);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+/** Checklist in the task editor. Changes are saved with the task. */
+function ChecklistField({ steps, onChange }: { steps: Subtask[]; onChange: (s: Subtask[]) => void }) {
+  const [draft, setDraft] = useState('');
+  const add = (text: string) => {
+    const items = splitSteps(text).map((title) => ({ id: uid(), title, done: false }));
+    if (items.length) onChange([...steps, ...items]);
+    setDraft('');
+  };
+  const done = steps.filter((x) => x.done).length;
+  return (
+    <div className="field">
+      <span>Checklist{steps.length ? ` · ${done}/${steps.length}` : ''}</span>
+      <div className="steps editor-steps">
+        {steps.map((x, i) => (
+          <div key={x.id} className={`step ${x.done ? 'done' : ''}`}>
+            <button
+              type="button"
+              className={`check sm ${x.done ? 'on' : ''}`}
+              role="checkbox"
+              aria-checked={x.done}
+              aria-label={`Mark step ${i + 1} ${x.done ? 'not done' : 'done'}`}
+              onClick={() => onChange(steps.map((y) => (y.id === x.id ? { ...y, done: !y.done } : y)))}
+            >
+              <Check size={10} strokeWidth={3} />
+            </button>
+            <input
+              className="step-input"
+              value={x.title}
+              aria-label={`Step ${i + 1}`}
+              onChange={(e) => onChange(steps.map((y) => (y.id === x.id ? { ...y, title: e.target.value } : y)))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.preventDefault();
+                // Backspace on an empty step removes it.
+                if (e.key === 'Backspace' && !x.title) {
+                  e.preventDefault();
+                  onChange(steps.filter((y) => y.id !== x.id));
+                }
+              }}
+            />
+            <button type="button" className="step-x" aria-label={`Remove step ${i + 1}`} onClick={() => onChange(steps.filter((y) => y.id !== x.id))}>
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+        <input
+          className="step-add"
+          value={draft}
+          placeholder={steps.length ? 'Add a step…' : 'Break it into steps (paste a list to add several)'}
+          aria-label="Add a step"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault(); // don't submit the form
+              add(draft);
+            }
+          }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData('text');
+            if (text.includes('\n')) {
+              e.preventDefault();
+              add(text);
+            }
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** "Add a task to this project" box under a project's task list. Understands dates, priority and repeats. */
+function ProjectQuickAdd({ projectId }: { projectId: string }) {
+  const [text, setText] = useState('');
+  const add = () => {
+    const p = parseQuick(text);
+    if (!p.title) return;
+    actions.addTask({ title: p.title, dueDate: p.date, priority: p.priority ?? 'med', repeat: p.repeat, projectId });
+    setText('');
+  };
+  return (
+    <div className="project-add">
+      <Plus size={15} />
+      <input
+        value={text}
+        placeholder="Add a task to this project — e.g. “Send draft fri !high”"
+        aria-label="Add a task to this project"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') add();
+          if (e.key === 'Escape') setText('');
+        }}
+      />
+    </div>
   );
 }

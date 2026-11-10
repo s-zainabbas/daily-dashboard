@@ -1,11 +1,12 @@
 import { forwardRef, useMemo, useState } from 'react';
-import { CalendarClock, CheckCircle2, CornerDownLeft, Flag, Plus } from 'lucide-react';
-import { dueLabel, formatTime } from '../lib/date';
+import { CalendarClock, CheckCircle2, CornerDownLeft, Flag, Plus, Repeat as RepeatIcon } from 'lucide-react';
+import { dueLabel, dueLabelInline, formatTime } from '../lib/date';
 import { parseQuick } from '../lib/parse';
+import { repeatLabel } from '../lib/repeat';
 import { actions, useStore } from '../lib/store';
 import { toast } from './ui';
 
-const EXAMPLES = ['Call Sam tomorrow !high', 'Standup at 9:30 for 15m', 'Dentist fri 3-4pm', 'Send invoice nov 14'];
+const EXAMPLES = ['Call Sam tomorrow !high', 'Standup at 9:30 for 15m', 'Dentist fri 3-4pm', 'Send invoice nov 14', 'Gym every mon wed fri', 'Pay rent monthly'];
 
 export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
   const [text, setText] = useState('');
@@ -20,8 +21,8 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
       actions.addEvent({ title: p.title, date: p.date!, start: p.start, end: p.end });
       toast(`Event added · ${dueLabel(p.date!)} ${formatTime(p.start!, use24h)}`);
     } else {
-      actions.addTask({ title: p.title, dueDate: p.date, priority: p.priority ?? 'med' });
-      toast(`Task added${p.date ? ` · ${dueLabel(p.date)}` : ''}`);
+      actions.addTask({ title: p.title, dueDate: p.date, priority: p.priority ?? 'med', repeat: p.repeat });
+      toast(p.repeat && p.date ? `Repeating task added · ${repeatLabel(p.repeat)}, first one ${dueLabelInline(p.date)}` : `Task added${p.date ? ` · ${dueLabel(p.date)}` : ''}`);
     }
     setText('');
   }
@@ -62,7 +63,12 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
               {p.kind === 'event' ? <CalendarClock size={12} /> : <CheckCircle2 size={12} />}
               {p.kind === 'event' ? 'Event' : 'Task'}
             </span>
-            {p.date && <span className="chip">{dueLabel(p.date)}</span>}
+            {p.date && <span className="chip">{p.repeat ? `From ${dueLabelInline(p.date)}` : dueLabel(p.date)}</span>}
+            {p.repeat && (
+              <span className="chip accent">
+                <RepeatIcon size={11} /> {repeatLabel(p.repeat)}
+              </span>
+            )}
             {p.start && (
               <span className="chip num">
                 {formatTime(p.start, use24h)}
@@ -78,7 +84,7 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
           </>
         ) : (
           <span className="examples">
-            Understands dates (<b>tomorrow</b>, <b>fri</b>, <b>nov 14</b>), times (<b>3pm</b>, <b>9-10:30</b>) and priority (<b>!high</b>). Add a time to make it an event.
+            Understands dates (<b>tomorrow</b>, <b>fri</b>, <b>nov 14</b>), times (<b>3pm</b>, <b>9-10:30</b>) and priority (<b>!high</b>) and repeats (<b>every mon</b>, <b>daily</b>). Add a time to make it an event.
           </span>
         )}
       </div>

@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { BookOpen, BriefcaseBusiness, CalendarPlus, CheckCircle2, Circle, CornerDownLeft, Keyboard, ListPlus, Palette, Pause, Play, Search, Settings, SunMoon, Target } from 'lucide-react';
+import { Sunrise, BookOpen, BriefcaseBusiness, CalendarPlus, CheckCircle2, Circle, CornerDownLeft, Keyboard, ListPlus, Palette, Pause, Play, Search, Settings, SunMoon, Target } from 'lucide-react';
+import { dueLabelInline } from '../lib/date';
 import { actions, useStore } from '../lib/store';
 import { timerActions, useTimer } from '../lib/timer';
 import { Dialog, toast } from './ui';
+import { VIEWS, type View } from './Sidebar';
 
 interface Item {
   id: string;
@@ -20,6 +22,8 @@ export interface PaletteHandlers {
   settings: () => void;
   shortcuts: () => void;
   quickAdd: () => void;
+  go: (view: View) => void;
+  plan: () => void;
 }
 
 export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: () => void; h: PaletteHandlers }) {
@@ -31,14 +35,21 @@ export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: (
   const timer = useTimer();
 
   const items = useMemo<Item[]>(() => {
+    // Switch tab first, then focus a field once that tab has rendered.
+    const goAndFocus = (view: View, id: string) => {
+      h.go(view);
+      setTimeout(() => document.getElementById(id)?.focus(), 60);
+    };
     const accents = ['violet', 'blue', 'green', 'amber', 'rose'] as const;
     const base: Item[] = [
       { id: 'quick', group: 'Create', label: 'Quick add…', icon: <ListPlus size={16} />, hint: '/', run: h.quickAdd },
       { id: 'task', group: 'Create', label: 'New task', icon: <CheckCircle2 size={16} />, hint: 'N', run: h.newTask },
       { id: 'event', group: 'Create', label: 'New event', icon: <CalendarPlus size={16} />, hint: 'E', run: h.newEvent },
-      { id: 'job', group: 'Create', label: 'Save a job application', icon: <BriefcaseBusiness size={16} />, run: () => document.getElementById('job-link')?.focus() },
+      { id: 'job', group: 'Create', label: 'Save a job application', icon: <BriefcaseBusiness size={16} />, run: () => goAndFocus('jobs', 'job-link') },
+      { id: 'plan', group: 'Focus', label: 'Plan my day', icon: <Sunrise size={16} />, hint: 'P', run: h.plan },
       { id: 'focus', group: 'Focus', label: timer.endsAt ? 'Pause focus timer' : 'Start focus timer', icon: timer.endsAt ? <Pause size={16} /> : <Play size={16} />, hint: 'F', run: timerActions.toggle },
-      { id: 'prio', group: 'Focus', label: 'Set today’s #1 priority', icon: <Target size={16} />, run: () => document.getElementById('priority')?.focus() },
+      { id: 'prio', group: 'Focus', label: 'Set today’s #1 priority', icon: <Target size={16} />, run: () => goAndFocus('today', 'priority') },
+      ...VIEWS.map((v, i): Item => ({ id: `go-${v.id}`, group: 'Go to', label: v.label, icon: <v.Icon size={16} />, hint: String(i + 1), run: () => h.go(v.id) })),
       { id: 'journal', group: 'Go to', label: 'Open journal', icon: <BookOpen size={16} />, hint: 'J', run: h.journal },
       { id: 'settings', group: 'Go to', label: 'Settings', icon: <Settings size={16} />, run: h.settings },
       { id: 'keys', group: 'Go to', label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, hint: '?', run: h.shortcuts },
@@ -53,8 +64,8 @@ export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: (
         label: t.title,
         icon: <Circle size={16} />,
         run: () => {
-          actions.toggleTask(t.id);
-          toast(`Completed “${t.title}”`, { label: 'Undo', run: () => actions.toggleTask(t.id) });
+          const next = actions.toggleTask(t.id);
+          toast(`Completed “${t.title}”${next?.dueDate ? ` · next one ${dueLabelInline(next.dueDate)}` : ''}`, { label: 'Undo', run: () => actions.toggleTask(t.id) });
         },
       }));
     const needle = q.trim().toLowerCase();

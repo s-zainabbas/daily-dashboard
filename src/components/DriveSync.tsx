@@ -64,7 +64,7 @@ export function syncStatus(v: SyncView): { text: string; tone: Tone } {
   }
 }
 
-function ago(t: number, now: Date): string {
+export function ago(t: number, now: Date): string {
   const s = Math.round((now.getTime() - t) / 1000);
   if (s < 45) return 'just now';
   if (s < 3600) return `${Math.round(s / 60)} min ago`;

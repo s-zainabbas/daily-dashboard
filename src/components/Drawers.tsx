@@ -8,6 +8,7 @@ import type { Accent, Theme } from '../lib/types';
 import { clearWeatherCache, searchPlaces, type Place } from '../lib/weather';
 import { useDriveSync } from '../lib/sync/driveSync';
 import { DriveSyncSection } from './DriveSync';
+import { CalendarSection } from './CalendarSettings';
 import { MOODS } from './Panels';
 import { Dialog, DialogHead, Empty, Segmented, Switch, toast } from './ui';
 
@@ -176,6 +177,7 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
       <DialogHead title="Settings" onClose={onClose} />
       <div className="drawer-body">
         <DriveSyncSection />
+        <CalendarSection />
 
         <section>
           <h3>You</h3>
@@ -353,6 +355,9 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
 
 export const SHORTCUTS: [string[], string][] = [
   [['⌘', 'K'], 'Command menu'],
+  [['1', '–', '6'], 'Switch tab (Today, Tasks, Schedule, Projects, Jobs, Notes)'],
+  [['['], 'Collapse / expand sidebar'],
+  [['P'], 'Plan my day'],
   [['/'], 'Quick add'],
   [['N'], 'New task'],
   [['E'], 'New event'],

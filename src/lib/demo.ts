@@ -21,6 +21,8 @@ export function demoState(name = 'Zain'): State {
     { id: uid(), title: 'Book flights for the offsite', done: false, priority: 'low', dueDate: addDays(t, 3), createdAt: now },
     { id: uid(), title: 'Renew domain + SSL certificate', done: false, priority: 'high', dueDate: addDays(t, -1), createdAt: now },
     { id: uid(), title: 'Draft Q1 roadmap one-pager', done: false, priority: 'med', dueDate: addDays(t, 2), createdAt: now },
+    { id: uid(), title: 'Plan the day', done: false, priority: 'med', dueDate: t, repeat: { freq: 'weekdays' }, createdAt: now },
+    { id: uid(), title: 'Weekly review + plan next week', done: false, priority: 'med', dueDate: addDays(t, (5 - new Date().getDay() + 7) % 7), repeat: { freq: 'weekly', days: [5] }, createdAt: now },
     { id: uid(), title: 'Final copy for pricing page', done: false, priority: 'med', waitingOn: 'Priya', createdAt: now },
     { id: uid(), title: 'Morning inbox zero', done: true, priority: 'low', dueDate: t, createdAt: now, completedAt: now - 3 * 36e5 },
     { id: uid(), title: 'Reply to recruiter about Friday', done: true, priority: 'med', dueDate: t, createdAt: now, completedAt: now - 2 * 36e5 },

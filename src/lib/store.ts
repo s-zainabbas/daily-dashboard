@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { dateKey, today } from './date';
+import { nextDue } from './repeat';
 import type { CalEvent, DayLog, Habit, JobApplication, Project, QuickLink, Settings, State, Task } from './types';
 
 export const STORAGE_KEY = 'daily-dashboard:v2';
@@ -284,8 +285,80 @@ export const actions = {
   updateTask(id: string, p: Partial<Task>) {
     patch('tasks', (ts) => ts.map((t) => (t.id === id ? { ...t, ...p } : t)));
   },
-  toggleTask(id: string) {
-    patch('tasks', (ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done, completedAt: !t.done ? Date.now() : undefined } : t)));
+  /**
+   * Tick or untick a task. Completing a repeating task adds the next copy (returned, for the toast).
+   * Unticking it again removes that copy, as long as it hasn't been ticked itself.
+   */
+  toggleTask(id: string): Task | undefined {
+    const task = getState().tasks.find((t) => t.id === id);
+    if (!task) return;
+    const done = !task.done;
+    let next: Task | undefined;
+    patch('tasks', (ts) => {
+      let out = ts.map((t) => (t.id === id ? { ...t, done, completedAt: done ? Date.now() : undefined } : t));
+      if (!task.repeat) return out;
+      const series = task.seriesId ?? task.id;
+      if (done) {
+        const due = nextDue(task.repeat, task.dueDate, today());
+        // Id from the series and date, so two synced devices completing the same copy don't both add one.
+        const nextId = `${series}@${due}`;
+        if (!out.some((t) => t.id === nextId)) {
+          next = {
+            ...task,
+            id: nextId,
+            seriesId: series,
+            done: false,
+            completedAt: undefined,
+            dueDate: due,
+            createdAt: Date.now(),
+            // The next copy starts with a fresh checklist.
+            subtasks: task.subtasks?.map((x) => ({ ...x, done: false })),
+          };
+          const i = out.findIndex((t) => t.id === id);
+          out = [...out.slice(0, i), next, ...out.slice(i)];
+        }
+      } else {
+        out = out.filter((t) => t.id === id || t.done || (t.seriesId ?? t.id) !== series || (t.dueDate ?? '') <= (task.dueDate ?? ''));
+      }
+      return out;
+    });
+    return next;
+  },
+  /** Add checklist steps to a task (one per line when pasting several). */
+  addSubtasks(taskId: string, titles: string[]) {
+    const items = titles.map((t) => t.trim()).filter(Boolean).map((title) => ({ id: uid(), title, done: false }));
+    if (!items.length) return;
+    patch('tasks', (ts) => ts.map((t) => (t.id === taskId ? { ...t, subtasks: [...(t.subtasks ?? []), ...items] } : t)));
+  },
+  /** Tick or untick a step. Returns true when that ticked off the last open step. */
+  toggleSubtask(taskId: string, subId: string): boolean {
+    let finished = false;
+    patch('tasks', (ts) =>
+      ts.map((t) => {
+        if (t.id !== taskId || !t.subtasks) return t;
+        const subtasks = t.subtasks.map((x) => (x.id === subId ? { ...x, done: !x.done } : x));
+        finished = !t.done && subtasks.every((x) => x.done) && !!subtasks.find((x) => x.id === subId)?.done;
+        return { ...t, subtasks };
+      }),
+    );
+    return finished;
+  },
+  removeSubtask(taskId: string, subId: string) {
+    patch('tasks', (ts) =>
+      ts.map((t) => {
+        if (t.id !== taskId || !t.subtasks) return t;
+        const subtasks = t.subtasks.filter((x) => x.id !== subId);
+        return { ...t, subtasks: subtasks.length ? subtasks : undefined };
+      }),
+    );
+  },
+  /** Move a repeating task on to its next date without completing it. */
+  skipTask(id: string): string | undefined {
+    const task = getState().tasks.find((t) => t.id === id);
+    if (!task?.repeat) return;
+    const due = nextDue(task.repeat, task.dueDate, today());
+    patch('tasks', (ts) => ts.map((t) => (t.id === id ? { ...t, dueDate: due } : t)));
+    return due;
   },
   removeTask(id: string) {
     const s = getState();
@@ -294,8 +367,19 @@ export const actions = {
     patch('tasks', (ts) => ts.filter((t) => t.id !== id));
     return () => task && patch('tasks', (ts) => [...ts.slice(0, index), task, ...ts.slice(index)]);
   },
+  /** Remove completed tasks. Returns an undo that puts them back in their original places. */
   clearCompleted() {
+    const before = getState().tasks;
+    const removed = new Set(before.filter((t) => t.done).map((t) => t.id));
     patch('tasks', (ts) => ts.filter((t) => !t.done));
+    return () =>
+      patch('tasks', (ts) => {
+        const now = new Map(ts.map((t) => [t.id, t]));
+        const known = new Set(before.map((t) => t.id));
+        const added = ts.filter((t) => !known.has(t.id)); // created after clearing: keep them on top
+        const restored = before.filter((t) => removed.has(t.id) || now.has(t.id)).map((t) => now.get(t.id) ?? t);
+        return [...added, ...restored];
+      });
   },
 
   addEvent(e: Omit<CalEvent, 'id'>) {
@@ -313,8 +397,13 @@ export const actions = {
   saveProject(p: Omit<Project, 'id'> & { id?: string }) {
     patch('projects', (ps) => (p.id ? ps.map((x) => (x.id === p.id ? { ...x, ...p, id: x.id } : x)) : [...ps, { ...p, id: uid() }]));
   },
+  /** Delete a project. Returns an undo that restores it with the same id, so its tasks stay linked. */
   removeProject(id: string) {
-    patch('projects', (ps) => ps.filter((p) => p.id !== id));
+    const ps = getState().projects;
+    const index = ps.findIndex((p) => p.id === id);
+    const project = ps[index];
+    patch('projects', (all) => all.filter((p) => p.id !== id));
+    return () => project && patch('projects', (all) => (all.some((p) => p.id === id) ? all : [...all.slice(0, index), project, ...all.slice(index)]));
   },
 
   addHabit(name: string) {

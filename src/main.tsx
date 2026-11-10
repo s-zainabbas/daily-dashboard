@@ -8,6 +8,7 @@ import App from './App';
 import { demoState } from './lib/demo';
 import { demoMode, replaceState } from './lib/store';
 import { initDriveSync } from './lib/sync/driveSync';
+import { initCalendar } from './lib/gcal';
 
 if (demoMode) {
   const demo = demoState('Alex');
@@ -15,6 +16,7 @@ if (demoMode) {
 }
 
 initDriveSync();
+initCalendar();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

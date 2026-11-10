@@ -70,6 +70,12 @@ export function dueLabel(key: DateKey, ref: DateKey = today()): string {
   return fromKey(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** `dueLabel` for use mid-sentence: "next one tomorrow", "next one Thursday". */
+export function dueLabelInline(key: DateKey, ref: DateKey = today()): string {
+  const l = dueLabel(key, ref);
+  return ['Today', 'Tomorrow', 'Yesterday'].includes(l) ? l.toLowerCase() : l;
+}
+
 export function longDate(d = new Date()): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }

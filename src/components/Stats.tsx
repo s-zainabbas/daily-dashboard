@@ -3,6 +3,7 @@ import { CalendarClock, Timer } from 'lucide-react';
 import { dateKey, formatDuration, formatTime, lastDays, nowMinutes, toMinutes, today } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
+import { useAllEvents } from '../lib/gcal';
 import type { CalEvent, Task } from '../lib/types';
 import { Ring } from './ui';
 
@@ -25,7 +26,7 @@ export function currentAndNext(events: CalEvent[], now = new Date()) {
 export function Stats() {
   const now = useNow(30_000);
   const tasks = useStore((s) => s.tasks);
-  const events = useStore((s) => s.events);
+  const events = useAllEvents();
   const habits = useStore((s) => s.habits);
   const focus = useStore((s) => s.focus);
   const use24h = useStore((s) => s.settings.use24h);

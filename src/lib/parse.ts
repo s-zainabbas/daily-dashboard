@@ -1,5 +1,6 @@
 import { addDays, dateKey, fromKey, fromMinutes, today } from './date';
-import type { DateKey, Priority, TimeKey } from './types';
+import { anchored, firstDue } from './repeat';
+import type { DateKey, Priority, Repeat, RepeatFreq, TimeKey } from './types';
 
 export interface Parsed {
   kind: 'task' | 'event';
@@ -8,6 +9,8 @@ export interface Parsed {
   start?: TimeKey;
   end?: TimeKey;
   priority?: Priority;
+  /** Set for "every …" phrases. A repeating item is always a task (any time stays in the title). */
+  repeat?: Repeat;
 }
 
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -27,6 +30,8 @@ function to24(h: number, mer?: string, guessPm = false): number {
  *   "Standup at 9:30 for 15m"       → event today 09:30–09:45
  *   "Dentist fri 3-4pm"             → event on the next Friday 15:00–16:00
  *   "Send invoice nov 14"           → task due Nov 14
+ *   "Gym every mon wed fri"         → task repeating on those days
+ *   "Pay rent monthly"              → task repeating every month
  */
 export function parseQuick(input: string, ref: DateKey = today()): Parsed {
   let text = ` ${input} `;
@@ -41,6 +46,33 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
     const t = m[1].toLowerCase();
     out.priority = t === '!!!' || t === '!high' || t === '!h' ? 'high' : t === '!!' || t.startsWith('!m') ? 'med' : t === '!' ? 'high' : 'low';
   });
+
+  // Repeats — before dates, so "every monday" isn't read as "next Monday".
+  const DAY = String.raw`(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?)s?\b`;
+  const UNIT: Record<string, RepeatFreq> = { day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' };
+  take(new RegExp(String.raw`\s(?:every|each)\s+(${DAY}(?:\s*(?:,|and|&)?\s*${DAY})*)(?=\s)`, 'i'), (m) => {
+    const days = [...m[1].toLowerCase().matchAll(/(sun|mon|tue|wed|thu|fri|sat)[a-z]*/g)].map((x) => WEEKDAYS.indexOf(x[1]));
+    out.repeat = { freq: 'weekly', days: [...new Set(days)] };
+  });
+  if (!out.repeat)
+    take(/\s(?:every\s+(?:week\s*day|work\s*day)s?|on\s+weekdays|weekdays)(?=\s)/i, () => {
+      out.repeat = { freq: 'weekdays' };
+    });
+  if (!out.repeat)
+    take(/\s(?:every|each)\s+(other|\d{1,3})?\s*(day|week|month|year)s?(?=\s)/i, (m) => {
+      const n = m[1] ? (m[1].toLowerCase() === 'other' ? 2 : Number(m[1])) : 1;
+      if (n < 1) return false;
+      out.repeat = { freq: UNIT[m[2].toLowerCase()], ...(n > 1 ? { interval: n } : {}) };
+    });
+  if (!out.repeat)
+    // Bare "weekly" etc. only at the end or before a start date, so "the weekly report" stays plain text.
+    take(/\s(daily|everyday|weekly|fortnightly|biweekly|monthly|yearly|annually)(?=\s*$|\s+(?:from|starting|beginning|on|today|tomorrow|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{4}-)[a-z]*\b)/i, (m) => {
+      const w = m[1].toLowerCase();
+      out.repeat =
+        w === 'fortnightly' || w === 'biweekly'
+          ? { freq: 'weekly', interval: 2 }
+          : { freq: w === 'daily' || w === 'everyday' ? 'daily' : w === 'weekly' ? 'weekly' : w === 'monthly' ? 'monthly' : 'yearly' };
+    });
 
   // Dates
   take(/\s(?:on\s+)?(\d{4})-(\d{2})-(\d{2})(?=\s)/, (m) => {
@@ -78,6 +110,14 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
       if (dateKey(d) < ref) d = new Date(r.getFullYear() + 1, month, day);
       out.date = dateKey(d);
     });
+
+  if (out.repeat) {
+    // A start date ("from tomorrow", "starting nov 14") counts if it fits; otherwise the first day that does.
+    out.date = firstDue(out.repeat, out.date ?? ref);
+    out.repeat = anchored(out.repeat, out.date);
+    out.title = text.replace(/\s+/g, ' ').trim().replace(/\s+(on|at|by|due|from|starting)$/i, '').trim();
+    return out;
+  }
 
   // Time range: "3-4pm", "14:00-15:30", "from 9 to 10am"
   const T = String.raw`(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`;
@@ -123,4 +163,12 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
     .replace(/\s+(on|at|by|due|from)$/i, '')
     .trim();
   return out;
+}
+
+/** Split pasted text into checklist steps: one per line, without list markers like "-", "*", "1." or "[ ]". */
+export function splitSteps(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)]|\[[ xX]?\])\s*/, '').trim())
+    .filter(Boolean);
 }

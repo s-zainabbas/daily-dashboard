@@ -13,6 +13,8 @@ export const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | unde
 export const googleConfigured = !!CLIENT_ID && !demoMode;
 
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+/** Read-only Google Calendar, asked for separately when you turn on the calendar. */
+export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 const SCOPES = `${DRIVE_SCOPE} openid email profile`;
 const TOKEN_KEY = 'daily-dashboard:google-token';
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
@@ -36,6 +38,8 @@ export class AuthError extends Error {
 interface StoredToken {
   accessToken: string;
   expiresAt: number;
+  /** Space-separated scopes this token covers. */
+  scope?: string;
 }
 
 /* ---------- Loading Google's library ---------- */
@@ -77,6 +81,11 @@ export function currentToken(): string | null {
   return null;
 }
 
+/** Whether the current token includes a scope (for example, calendar access). */
+export function tokenHasScope(scope: string): boolean {
+  return !!currentToken() && !!token?.scope?.split(' ').includes(scope);
+}
+
 export function tokenExpiresAt(): number | undefined {
   return token?.expiresAt;
 }
@@ -101,6 +110,8 @@ function getClient() {
   client ??= oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
+    // Keep access granted earlier (like the calendar) when the token is renewed.
+    include_granted_scopes: true,
     callback: (r) => {
       const p = pending;
       pending = null;
@@ -109,7 +120,7 @@ function getClient() {
       if (!oauth2.hasGrantedAllScopes(r, DRIVE_SCOPE)) {
         return p.reject(new AuthError('scope_denied', 'Drive access wasn’t allowed. Connect again and tick the box that lets the app use its own Drive folder.'));
       }
-      token = { accessToken: r.access_token, expiresAt: Date.now() + Number(r.expires_in || 3600) * 1000 };
+      token = { accessToken: r.access_token, expiresAt: Date.now() + Number(r.expires_in || 3600) * 1000, scope: r.scope };
       try {
         localStorage.setItem(TOKEN_KEY, JSON.stringify(token));
       } catch {
@@ -135,7 +146,7 @@ function getClient() {
  * - `select_account`: always show the account chooser (first connect, switching accounts)
  * - `''`: reuse the signed-in account; the popup closes by itself if consent was already given
  */
-export function requestToken(prompt: '' | 'select_account' | 'consent', loginHint?: string): Promise<string> {
+export function requestToken(prompt: '' | 'select_account' | 'consent', loginHint?: string, extraScope?: string): Promise<string> {
   let c: google.accounts.oauth2.TokenClient;
   try {
     c = getClient();
@@ -145,7 +156,7 @@ export function requestToken(prompt: '' | 'select_account' | 'consent', loginHin
   pending?.reject(new AuthError('cancelled', 'Replaced by a newer sign-in request.'));
   return new Promise<string>((resolve, reject) => {
     pending = { resolve, reject };
-    c.requestAccessToken({ prompt, login_hint: loginHint });
+    c.requestAccessToken({ prompt, login_hint: loginHint, ...(extraScope ? { scope: `${SCOPES} ${extraScope}` } : {}) });
   });
 }
 

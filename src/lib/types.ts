@@ -9,6 +9,26 @@ export type DateKey = string;
 /** Local wall-clock time, `HH:MM` (24h). */
 export type TimeKey = string;
 
+export type RepeatFreq = 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly';
+
+/** How a task repeats. A new copy is created, due on the next date, when one is completed. */
+export interface Repeat {
+  freq: RepeatFreq;
+  /** Every N days / weeks / months / years. Defaults to 1. */
+  interval?: number;
+  /** Weekly only: which weekdays, 0 = Sunday … 6 = Saturday. Defaults to the due date's weekday. */
+  days?: number[];
+  /** Monthly / yearly only: the day of the month to aim for, so the 31st stays the 31st after a short month. */
+  monthDay?: number;
+}
+
+/** One step in a task's checklist. */
+export interface Subtask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -19,6 +39,11 @@ export interface Task {
   waitingOn?: string;
   projectId?: string;
   notes?: string;
+  /** Checklist of steps. */
+  subtasks?: Subtask[];
+  repeat?: Repeat;
+  /** Id shared by every copy of a repeating task (the first copy's id). */
+  seriesId?: string;
   createdAt: number;
   completedAt?: number;
 }
@@ -114,7 +139,8 @@ export interface State {
   links: QuickLink[];
   jobs: JobApplication[];
   notes: string;
-  priority: { title: string; done: boolean };
+  /** `plannedOn`: the day you last ran "Plan my day" (kept here so it syncs with the priority). */
+  priority: { title: string; done: boolean; plannedOn?: DateKey };
   reflection: Reflection;
   focus: Record<DateKey, FocusDay>;
   journal: DayLog[];

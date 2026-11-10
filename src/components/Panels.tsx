@@ -142,7 +142,7 @@ export function Links() {
   );
 }
 
-function Favicon({ url, label }: { url: string; label: string }) {
+export function Favicon({ url, label }: { url: string; label: string }) {
   const [failed, setFailed] = useState(false);
   const host = hostOf(url);
   if (failed || !navigator.onLine) return <span className="fav">{label.slice(0, 1).toUpperCase()}</span>;
@@ -153,7 +153,7 @@ function Favicon({ url, label }: { url: string; label: string }) {
 
 const STATUS: Record<ProjectStatus, string> = { track: 'On track', risk: 'At risk', blocked: 'Blocked', paused: 'Paused', done: 'Done' };
 
-export function Projects() {
+export function Projects({ selectedId, onSelect }: { selectedId?: string; onSelect?: (id: string) => void } = {}) {
   const projects = useStore((s) => s.projects);
   const tasks = useStore((s) => s.tasks);
   const [editing, setEditing] = useState<Project | 'new' | null>(null);
@@ -178,7 +178,12 @@ export function Projects() {
           {projects.map((p) => {
             const open = tasks.filter((t) => t.projectId === p.id && !t.done).length;
             return (
-              <button key={p.id} className="project" onClick={() => setEditing(p)}>
+              <button
+                key={p.id}
+                className={`project ${selectedId === p.id ? 'selected' : ''}`}
+                aria-current={selectedId === p.id ? 'true' : undefined}
+                onClick={() => (onSelect ? onSelect(p.id) : setEditing(p))}
+              >
                 <div className="project-top">
                   <span className={`status-dot status-${p.status}`} />
                   <span className="project-name">{p.name}</span>
@@ -205,7 +210,7 @@ export function Projects() {
   );
 }
 
-function ProjectEditor({ project, onClose }: { project: Project | 'new' | null; onClose: () => void }) {
+export function ProjectEditor({ project, onClose }: { project: Project | 'new' | null; onClose: () => void }) {
   const init = project && project !== 'new' ? project : undefined;
   const blank = { name: '', status: 'track' as ProjectStatus, nextAction: '', details: '', progress: 0 };
   const [form, setForm] = useState(blank);
@@ -254,8 +259,8 @@ function ProjectEditor({ project, onClose }: { project: Project | 'new' | null; 
               type="button"
               className="btn ghost danger"
               onClick={() => {
-                actions.removeProject(init.id);
-                toast(`Deleted “${init.name}”`, { label: 'Undo', run: () => actions.saveProject({ ...init, id: undefined }) });
+                const undo = actions.removeProject(init.id);
+                toast(`Deleted “${init.name}”`, { label: 'Undo', run: undo });
                 onClose();
               }}
             >

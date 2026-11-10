@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Command, MapPin, Moon, Settings as Cog, Sun } from 'lucide-react';
+import { BookOpen, Command, MapPin, Moon, Pencil, Settings as Cog, Sun } from 'lucide-react';
 import { greeting, longDate } from '../lib/date';
 import { useNow, useResolvedTheme } from '../lib/hooks';
 import { actions, useStore } from '../lib/store';
 import { SyncButton } from './DriveSync';
+import { Favicon } from './Panels';
+import { hostOf, safeUrl } from '../lib/hooks';
 import { cachedWeather, describe, fetchWeather, type Weather } from '../lib/weather';
 
 function isoWeek(d: Date) {
@@ -94,6 +96,24 @@ function WeatherPill({ onOpenSettings }: { onOpenSettings: () => void }) {
   );
 }
 
+/** Your quick links as small icons in the top bar, one click away on every tab. */
+function LinksBar() {
+  const links = useStore((s) => s.links);
+  if (!links.length) return null;
+  return (
+    <nav className="links-bar" aria-label="Quick links">
+      {links.slice(0, 8).map((l) => (
+        <a key={l.id} href={safeUrl(l.url) ?? '#'} target="_blank" rel="noopener noreferrer" data-tip={l.label} aria-label={l.label}>
+          <Favicon url={l.url} label={l.label || hostOf(l.url)} />
+        </a>
+      ))}
+      <a href="#notes" className="links-edit" data-tip="Edit links" aria-label="Edit quick links">
+        <Pencil size={12} />
+      </a>
+    </nav>
+  );
+}
+
 export function TopBar({ onPalette, onJournal, onSettings }: { onPalette: () => void; onJournal: () => void; onSettings: () => void }) {
   const now = useNow(1000);
   const name = useStore((s) => s.settings.name);
@@ -123,6 +143,7 @@ export function TopBar({ onPalette, onJournal, onSettings }: { onPalette: () => 
         </div>
       </div>
       <div className="top-right">
+        <LinksBar />
         <WeatherPill onOpenSettings={onSettings} />
         <div className="toolbar">
           <button className="icon-btn" onClick={onPalette} title="Command menu (⌘K)" aria-label="Open command menu">

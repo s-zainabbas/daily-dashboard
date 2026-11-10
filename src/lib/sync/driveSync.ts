@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { toast } from '../../components/ui';
 import { AuthError, clearToken, currentToken, fetchAccount, googleConfigured, loadGis, requestToken, revokeAccess } from '../google/auth';
 import { drive } from '../google/drive';
+import { disconnectCalendar, refreshCalendar } from '../gcal';
 import { applyRemote, getState, onLocalChange, replaceState, rollover, setState } from '../store';
 import { SyncEngine, type FirstChoice, type SyncView } from './engine';
 import { deviceName, localMeta } from './local';
@@ -70,9 +71,13 @@ export function connectGoogle(mode: 'connect' | 'switch' | 'reconnect' = 'connec
       const account = await fetchAccount(token);
       const before = engine.getView().account;
       if (mode === 'reconnect' && before?.sub === account.sub) return engine.resumed();
-      if (before && before.sub !== account.sub) toast(`Switched to ${account.email}.`);
+      if (before && before.sub !== account.sub) {
+        toast(`Switched to ${account.email}.`);
+        disconnectCalendar(); // the calendar belonged to the other account
+      }
       return engine.connected(account);
     })
+    .then(() => refreshCalendar(true))
     .catch(authFailed);
 }
 
@@ -86,6 +91,7 @@ export function syncNow(): Promise<void> {
 export async function disconnectGoogle() {
   if (!engine) return;
   engine.disconnect();
+  disconnectCalendar();
   await revokeAccess();
   toast('Disconnected. Your data is still on this device and in your Google Drive.');
 }
