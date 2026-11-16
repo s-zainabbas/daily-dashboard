@@ -40,7 +40,7 @@ export interface GEvent {
 
 export class CalendarError extends Error {
   constructor(
-    public kind: 'auth' | 'scope' | 'offline' | 'disabled' | 'other',
+    public kind: 'auth' | 'scope' | 'offline' | 'disabled' | 'conflict' | 'gone' | 'other',
     message: string,
     /** Where to fix it, e.g. the Google Cloud page that turns the Calendar API on. */
     public link?: string,
@@ -57,14 +57,22 @@ export function enableApiLink(googleMessage = '', clientId = ''): string {
   return `https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview${project ? `?project=${project}` : ''}`;
 }
 
-async function get<T>(token: string, url: string): Promise<T> {
+const get = <T,>(token: string, url: string) => call<T>(token, 'GET', url);
+
+async function call<T>(token: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown): Promise<T> {
   let r: Response;
   try {
-    r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    r = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
   } catch {
     throw new CalendarError('offline', 'Can’t reach Google Calendar.');
   }
-  if (r.ok) return r.json();
+  if (r.ok) return (r.status === 204 ? undefined : r.json()) as Promise<T>;
+  if (r.status === 409) throw new CalendarError('conflict', 'Already exists.');
+  if (r.status === 404 || r.status === 410) throw new CalendarError('gone', 'Already deleted.');
   let reason = '';
   let message = '';
   try {
@@ -152,4 +160,81 @@ export function toShown(e: GEvent, cal: GCalendar): ShownEvent[] {
   // Last day: all-day if it runs to midnight, otherwise until its end time.
   out.push(hhmm(f) === '00:00' ? { ...base, id: id(ed), date: ed } : { ...base, id: id(ed), date: ed, start: '00:00', end: hhmm(f) });
   return out;
+}
+
+/* ---------- Phone reminders: events the dashboard writes to your main calendar ---------- */
+
+/** Every reminder event's id starts with this, so the dashboard can find (and hide) its own. */
+export const REMINDER_PREFIX = 'ddrem';
+const REMINDER_TAG = 'dailyDashboard';
+
+export interface ReminderEvent {
+  /** Google event id: `ddrem` + base32hex, as Google requires for ids chosen by the app. */
+  id: string;
+  summary: string;
+  start: Date;
+  end: Date;
+  /** Minutes before `start` that Google alerts you. */
+  alertBefore: number;
+  /** A reminder for a task: doesn't mark you busy. */
+  free: boolean;
+  description?: string;
+  location?: string;
+}
+
+function toGoogle(r: ReminderEvent, timeZone: string) {
+  return {
+    id: r.id,
+    summary: r.summary,
+    description: r.description,
+    location: r.location,
+    start: { dateTime: r.start.toISOString(), timeZone },
+    end: { dateTime: r.end.toISOString(), timeZone },
+    transparency: r.free ? 'transparent' : 'opaque',
+    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: r.alertBefore }] },
+    extendedProperties: { private: { [REMINDER_TAG]: '1' } },
+    status: 'confirmed',
+  };
+}
+
+/** Ids of the reminder events the dashboard has in your main calendar, from yesterday on. */
+export async function listReminderIds(token: string, from: Date): Promise<string[]> {
+  const ids: string[] = [];
+  let page: string | undefined;
+  for (let i = 0; i < 4; i++) {
+    const q = new URLSearchParams({
+      privateExtendedProperty: `${REMINDER_TAG}=1`,
+      timeMin: from.toISOString(),
+      maxResults: '250',
+      fields: 'items(id,status),nextPageToken',
+    });
+    if (page) q.set('pageToken', page);
+    const j = await get<{ items?: { id: string; status?: string }[]; nextPageToken?: string }>(token, `${API}/calendars/primary/events?${q}`);
+    for (const e of j.items ?? []) if (e.status !== 'cancelled' && e.id.startsWith(REMINDER_PREFIX)) ids.push(e.id);
+    page = j.nextPageToken;
+    if (!page) break;
+  }
+  return ids;
+}
+
+/**
+ * Add a reminder event. Its id is fixed by its contents, so adding it twice (from two devices, or
+ * after it was deleted) just brings back the same event.
+ */
+export async function putReminder(token: string, r: ReminderEvent, timeZone: string): Promise<void> {
+  const body = toGoogle(r, timeZone);
+  try {
+    await call(token, 'POST', `${API}/calendars/primary/events`, body);
+  } catch (e) {
+    if (!(e instanceof CalendarError) || e.kind !== 'conflict') throw e;
+    await call(token, 'PUT', `${API}/calendars/primary/events/${r.id}`, body);
+  }
+}
+
+export async function deleteReminder(token: string, id: string): Promise<void> {
+  try {
+    await call(token, 'DELETE', `${API}/calendars/primary/events/${id}`);
+  } catch (e) {
+    if (!(e instanceof CalendarError) || e.kind !== 'gone') throw e;
+  }
 }

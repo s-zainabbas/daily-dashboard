@@ -4,7 +4,7 @@ import { emptyState, normalize } from '../store';
 import type { State, Task } from '../types';
 import { SyncEngine } from './engine';
 import type { MetaStore, SyncMeta } from './local';
-import { parseCloud } from './schema';
+import { parseCloud, SCHEMA_VERSION } from './schema';
 
 /* ---------- A fake Google Drive, kept in memory ---------- */
 
@@ -184,7 +184,7 @@ describe('first connection', () => {
     expect(a.view.status).toBe('synced');
     const file = parseCloud(drive.only().body);
     expect(Object.values(file.collections.tasks).map((e) => e.data.title)).toEqual(['Buy milk']);
-    expect(file.schema).toBe(1);
+    expect(file.schema).toBe(SCHEMA_VERSION);
     expect(file.device.name).toBe('laptop');
   });
 

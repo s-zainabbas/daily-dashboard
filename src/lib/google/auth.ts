@@ -15,6 +15,8 @@ export const googleConfigured = !!CLIENT_ID && !demoMode;
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 /** Read-only Google Calendar, asked for separately when you turn on the calendar. */
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+/** Add and remove events, asked for only when you turn on phone reminders (see phoneReminders.ts). */
+export const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 const SCOPES = `${DRIVE_SCOPE} openid email profile`;
 const TOKEN_KEY = 'daily-dashboard:google-token';
 const GIS_SRC = 'https://accounts.google.com/gsi/client';

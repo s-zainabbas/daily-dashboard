@@ -6,7 +6,7 @@ import { nextWeek } from '../lib/plan';
 import { parseQuick, splitSteps } from '../lib/parse';
 import { anchored, DAY_SHORT, firstDue, MON_FIRST, nextDue, repeatLabel } from '../lib/repeat';
 import { actions, uid, useStore } from '../lib/store';
-import { timerActions } from '../lib/timer';
+import { workActions } from '../lib/timer';
 import type { Priority, Repeat, RepeatFreq, Subtask, Task } from '../lib/types';
 import { Card, Dialog, DialogHead, Empty, Segmented, toast } from './ui';
 
@@ -350,13 +350,11 @@ function TaskRow({ task, project, onEdit, drag }: { task: Task; project?: string
             </button>
             <button
               className="icon-btn sm task-extra"
-              title="Start a focus session on this"
-              aria-label="Start a focus session on this task"
+              title="Start working on this"
+              aria-label="Start working on this task"
               onClick={() => {
-                timerActions.setMode('focus');
-                timerActions.setTask(task.id);
-                timerActions.start();
-                toast(`Focusing on “${task.title}”`);
+                const prev = workActions.start(task.id);
+                toast(`Working on “${task.title}”${prev?.minutes ? ` · logged ${prev.minutes} min on the last one` : ''}`);
               }}
             >
               <Play size={14} />
@@ -436,7 +434,7 @@ function TaskEditor({ task, onClose, defaultProjectId }: { task: Task | 'new' | 
       <form className="modal-body" onSubmit={save}>
         <label className="field">
           <span>Task</span>
-          <input className="input" autoFocus required value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="What needs doing?" />
+          <input className="input" autoFocus data-autofocus required value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="What needs doing?" />
         </label>
         <div className="row">
           <label className="field">
@@ -818,7 +816,7 @@ function SnoozeMenu({ task }: { task: Task }) {
       </button>
       {open && (
         <div className="snooze-menu" role="menu" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
-          <button role="menuitem" autoFocus onClick={() => snooze(addDays(t, 1))}>
+          <button role="menuitem" autoFocus data-autofocus onClick={() => snooze(addDays(t, 1))}>
             Tomorrow <small>{fromKey(addDays(t, 1)).toLocaleDateString(undefined, { weekday: 'short' })}</small>
           </button>
           <button role="menuitem" onClick={() => snooze(addDays(t, 2))}>

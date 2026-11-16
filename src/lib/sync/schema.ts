@@ -18,14 +18,15 @@ import type { State } from '../types';
  * - No tokens or secrets are ever written here.
  */
 
-export const SCHEMA_VERSION = 1;
+/** 2: adds transactions, budgets, savingsGoals and money. Older apps refuse it instead of dropping them. */
+export const SCHEMA_VERSION = 2;
 export const APP_ID = 'daily-dashboard';
 const TOMBSTONE_DAYS = 90;
 
 /** Lists of records with ids. Journal and focus are keyed by date. */
-export const COLLECTIONS = ['tasks', 'events', 'projects', 'habits', 'links', 'jobs', 'journal', 'focus', 'pages'] as const;
+export const COLLECTIONS = ['tasks', 'events', 'projects', 'habits', 'links', 'jobs', 'journal', 'focus', 'pages', 'transactions', 'budgets', 'savingsGoals'] as const;
 /** Single values. */
-export const VALUES = ['notes', 'priority', 'reflection', 'settings', 'onboarded', 'lastActiveDate', 'week'] as const;
+export const VALUES = ['notes', 'priority', 'reflection', 'settings', 'onboarded', 'lastActiveDate', 'week', 'money'] as const;
 export type CollectionKey = (typeof COLLECTIONS)[number];
 export type ValueKey = (typeof VALUES)[number];
 
@@ -189,7 +190,7 @@ export function parseCloud(text: string): CloudData {
   if (j.schema > SCHEMA_VERSION) {
     throw new NewerSchemaError('The copy in Google Drive was saved by a newer version of the app. Reload this page to update, then sync again.');
   }
-  // Older versions would be upgraded here, one step at a time (none exist yet).
+  // Version 1 files simply lack the money collections; reading them as empty is the upgrade.
   const out = emptyCloud();
   out.savedAt = Number(j.savedAt) || 0;
   out.device = isObj(j.device) ? { id: String(j.device.id ?? ''), name: String(j.device.name ?? '') } : out.device;
@@ -221,6 +222,8 @@ export function hasContent(s: State): boolean {
     s.projects.length > 0 ||
     s.habits.length > 0 ||
     s.jobs.length > 0 ||
+    s.transactions.length > 0 ||
+    s.savingsGoals.length > 0 ||
     s.pages.some((p) => p.body.trim() || p.title.trim()) ||
     s.journal.length > 0 ||
     Object.keys(s.focus).length > 0 ||
@@ -237,6 +240,7 @@ export function summarize(s: State): string {
     [s.projects.length, 'project'],
     [s.habits.length, 'habit'],
     [s.jobs.length, 'job'],
+    [s.transactions.length, 'transaction'],
     [s.journal.length, 'journal day'],
     [s.pages.length, 'note'],
   ];

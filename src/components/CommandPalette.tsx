@@ -1,11 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, CalendarRange, Maximize2, MoonStar, NotebookPen, Sunrise, CalendarPlus, CheckCircle2, Circle, CornerDownLeft, Keyboard, ListPlus, Palette, Pause, Play, Search, Settings, SunMoon, Target } from 'lucide-react';
+import { BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, CalendarRange, Check, Compass, MoonStar, NotebookPen, Sunrise, CalendarPlus, CheckCircle2, Circle, CornerDownLeft, Keyboard, ListPlus, Palette, Search, Settings, Square, SunMoon, Target, Wallet } from 'lucide-react';
 import { dueLabelInline, fromKey, today } from '../lib/date';
 import { useAllEvents } from '../lib/gcal';
 import type { ShownEvent } from '../lib/google/calendar';
 import { noteTitle } from '../lib/markdown';
 import { actions, getState, useStore } from '../lib/store';
-import { timerActions, useTimer } from '../lib/timer';
+import { useWork, workActions, workTitle } from '../lib/timer';
+import { loggedToast } from './Now';
 import { Dialog, toast } from './ui';
 import { VIEWS, type View } from './Sidebar';
 
@@ -28,7 +29,9 @@ export interface PaletteHandlers {
   go: (view: View) => void;
   plan: () => void;
   shutdown: () => void;
-  focusMode: () => void;
+  addMoney: (kind: 'expense' | 'income') => void;
+  /** Show the Now card on Today. */
+  now: () => void;
   weekly: () => void;
 }
 
@@ -40,7 +43,7 @@ export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: (
   allEventsRef.current = events;
   const theme = useStore((s) => s.settings.theme);
   const accent = useStore((s) => s.settings.accent);
-  const timer = useTimer();
+  const work = useWork();
 
   const items = useMemo<Item[]>(() => {
     // Switch tab first, then focus a field once that tab has rendered.
@@ -53,12 +56,19 @@ export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: (
       { id: 'quick', group: 'Create', label: 'Quick add…', icon: <ListPlus size={16} />, hint: '/', run: h.quickAdd },
       { id: 'task', group: 'Create', label: 'New task', icon: <CheckCircle2 size={16} />, hint: 'N', run: h.newTask },
       { id: 'event', group: 'Create', label: 'New event', icon: <CalendarPlus size={16} />, hint: 'E', run: h.newEvent },
+      { id: 'expense', group: 'Create', label: 'Add an expense', icon: <Wallet size={16} />, run: () => h.addMoney('expense') },
+      { id: 'income', group: 'Create', label: 'Add income', icon: <Wallet size={16} />, run: () => h.addMoney('income') },
       { id: 'job', group: 'Create', label: 'Save a job application', icon: <BriefcaseBusiness size={16} />, run: () => goAndFocus('jobs', 'job-link') },
       { id: 'plan', group: 'Focus', label: 'Plan my day', icon: <Sunrise size={16} />, hint: 'P', run: h.plan },
       { id: 'shutdown', group: 'Focus', label: 'Shut down for the day', icon: <MoonStar size={16} />, hint: 'S', run: h.shutdown },
-      { id: 'focusmode', group: 'Focus', label: 'Full-screen focus mode', icon: <Maximize2 size={16} />, hint: '⇧F', run: h.focusMode },
+      { id: 'now', group: 'Focus', label: 'What should I do now?', icon: <Compass size={16} />, run: h.now },
       { id: 'weekly', group: 'Focus', label: 'Weekly review', icon: <CalendarRange size={16} />, hint: 'W', run: h.weekly },
-      { id: 'focus', group: 'Focus', label: timer.endsAt ? 'Pause focus timer' : 'Start focus timer', icon: timer.endsAt ? <Pause size={16} /> : <Play size={16} />, hint: 'F', run: timerActions.toggle },
+      ...(work.startedAt
+        ? [
+            { id: 'stop', group: 'Focus', label: `Stop working on ${workTitle(work.taskId) ? `“${workTitle(work.taskId)}”` : 'this'}`, icon: <Square size={16} />, run: () => loggedToast(workActions.stop()) },
+            { id: 'finish', group: 'Focus', label: `Done with ${workTitle(work.taskId) ? `“${workTitle(work.taskId)}”` : 'this'}`, icon: <Check size={16} />, run: () => loggedToast(workActions.finish(), true) },
+          ]
+        : []),
       { id: 'prio', group: 'Focus', label: 'Set today’s #1 priority', icon: <Target size={16} />, run: () => goAndFocus('today', 'priority') },
       ...VIEWS.map((v, i): Item => ({ id: `go-${v.id}`, group: 'Go to', label: v.label, icon: <v.Icon size={16} />, hint: String(i + 1), run: () => h.go(v.id) })),
       { id: 'settings', group: 'Go to', label: 'Settings', icon: <Settings size={16} />, run: h.settings },
@@ -82,7 +92,7 @@ export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: (
     if (!needle) return [...base, ...open.slice(0, 5)];
     const commands = [...base, ...open].filter((i) => i.label.toLowerCase().includes(needle) || i.group.toLowerCase().includes(needle));
     return [...commands, ...searchEverything(needle, h)];
-  }, [q, tasks, theme, accent, timer.endsAt, h, events]);
+  }, [q, tasks, theme, accent, work, h, events]);
 
   const index = Math.min(sel, Math.max(0, items.length - 1));
   const close = () => {
@@ -104,6 +114,7 @@ export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: (
         <Search size={18} />
         <input
           autoFocus
+          data-autofocus
           value={q}
           placeholder="Search everything, or type a command…"
           aria-label="Command"

@@ -51,8 +51,8 @@
       ]
     },
     {
-      "name": "Focus",
-      "short_name": "Focus",
+      "name": "What should I do now?",
+      "short_name": "Now",
       "url": "./?action=focus#today",
       "icons": [
         {

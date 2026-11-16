@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { addDays, today } from './date';
 import { CALENDAR_SCOPE, currentToken, googleConfigured, requestToken, tokenHasScope } from './google/auth';
-import { CalendarError, listCalendars, listEvents, toShown, type GCalendar, type ShownEvent } from './google/calendar';
+import { CalendarError, listCalendars, listEvents, REMINDER_PREFIX, toShown, type GCalendar, type ShownEvent } from './google/calendar';
 import { useStore } from './store';
 import type { CalEvent, JobApplication } from './types';
 import { interviewEvents } from './jobs';
@@ -94,7 +94,10 @@ async function run() {
     const from = addDays(today(), -7);
     const to = addDays(today(), 60);
     const lists = await Promise.all(
-      calendars.filter((c) => ids.has(c.id)).map(async (c) => (await listEvents(token, c.id, from, to)).flatMap((e) => toShown(e, c))),
+      calendars.filter((c) => ids.has(c.id)).map(async (c) => (await listEvents(token, c.id, from, to))
+          // The dashboard's own phone reminders are already shown as your tasks and events.
+          .filter((e) => !e.id.startsWith(REMINDER_PREFIX))
+          .flatMap((e) => toShown(e, c))),
     );
     set({ calendars, events: lists.flat(), fetchedAt: Date.now(), status: 'ok' });
   } catch (e) {

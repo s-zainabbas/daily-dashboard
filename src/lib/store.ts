@@ -2,7 +2,8 @@ import { useSyncExternalStore } from 'react';
 import { dateKey, today } from './date';
 import { nextDue } from './repeat';
 import { bump } from './habits';
-import type { CalEvent, DayLog, Habit, JobApplication, NotePage, Project, QuickLink, Settings, State, Task } from './types';
+import { kvGet, kvSet, onKvChange } from './kv';
+import type { CalEvent, DayLog, Habit, JobApplication, NotePage, Project, QuickLink, SavingsGoal, Settings, State, Task, Transaction } from './types';
 
 export const STORAGE_KEY = 'daily-dashboard:v2';
 const LEGACY_PREFIX = 'dashboard.';
@@ -17,9 +18,18 @@ export const defaultSettings: Settings = {
   units: 'c',
   focusMinutes: 25,
   breakMinutes: 5,
+  nudgeMinutes: 50,
   sound: true,
   eventReminder: 10,
 };
+
+/** A sensible currency from the browser's region (en-GB → GBP, de-DE → EUR…); USD otherwise. */
+export function defaultCurrency(): string {
+  const region = (typeof navigator !== 'undefined' ? navigator.language : '').split('-')[1]?.toUpperCase();
+  const euro = ['AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK'];
+  const byRegion: Record<string, string> = { GB: 'GBP', CA: 'CAD', AU: 'AUD', NZ: 'NZD', IN: 'INR', PK: 'PKR', AE: 'AED', SA: 'SAR', JP: 'JPY', CH: 'CHF', SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN', BR: 'BRL', MX: 'MXN', SG: 'SGD', ZA: 'ZAR', TR: 'TRY' };
+  return region ? (euro.includes(region) ? 'EUR' : byRegion[region] ?? 'USD') : 'USD';
+}
 
 export function emptyState(): State {
   return {
@@ -36,6 +46,10 @@ export function emptyState(): State {
       { id: uid(), label: 'GitHub', url: 'https://github.com' },
     ],
     jobs: [],
+    transactions: [],
+    budgets: [],
+    savingsGoals: [],
+    money: { currency: defaultCurrency() },
     notes: '',
     pages: [],
     priority: { title: '', done: false },
@@ -129,6 +143,10 @@ export function normalize(raw: any): State {
     habits: Array.isArray(raw.habits) ? raw.habits : [],
     links: Array.isArray(raw.links) ? raw.links : base.links,
     jobs: Array.isArray(raw.jobs) ? raw.jobs : [],
+    transactions: Array.isArray(raw.transactions) ? raw.transactions : [],
+    budgets: Array.isArray(raw.budgets) ? raw.budgets : [],
+    savingsGoals: Array.isArray(raw.savingsGoals) ? raw.savingsGoals : [],
+    money: { ...base.money, ...(raw.money && typeof raw.money === 'object' ? raw.money : {}) },
     journal: Array.isArray(raw.journal) ? raw.journal : [],
     focus: raw.focus && typeof raw.focus === 'object' ? raw.focus : {},
     priority: { ...base.priority, ...raw.priority },
@@ -191,7 +209,12 @@ const linkedToDrive = () => !!readJSON<{ account?: unknown }>(SYNC_KEY)?.account
 
 function initialState(): State {
   if (typeof localStorage === 'undefined' || demoMode) return emptyState();
-  const saved = readJSON<State>(STORAGE_KEY);
+  let saved: State | undefined;
+  try {
+    saved = JSON.parse(kvGet(STORAGE_KEY) || 'null') ?? undefined;
+  } catch {
+    saved = undefined;
+  }
   const s = saved ? normalize(saved) : migrateLegacy(readJSON) ?? emptyState();
   if (!saved && s.onboarded) migratedFromLegacy = true;
   // When synced, wait for the latest data from the cloud before closing out the day,
@@ -213,19 +236,26 @@ let saveError: ((e: unknown) => void) | undefined;
 
 export const onSaveError = (fn: (e: unknown) => void) => (saveError = fn);
 
-function persist() {
+function persist(closing = false) {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   if (demoMode) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    kvSet(STORAGE_KEY, JSON.stringify(state), { closing, onError: () => saveError?.(new Error('save failed')) });
   } catch (e) {
     saveError?.(e);
   }
 }
 
-export function flush() {
-  if (saveTimer) persist();
+export function flush(closing = false) {
+  if (saveTimer) persist(closing);
+}
+
+/** Load saved data again, once IndexedDB is open (see main.tsx). */
+export function reloadFromStorage() {
+  if (demoMode) return;
+  state = initialState();
+  listeners.forEach((l) => l());
 }
 
 export const getState = () => state;
@@ -260,6 +290,9 @@ export function replaceState(next: State) {
   setState(() => normalize(next));
 }
 
+/** Hear about every change, local or from the cloud. */
+export const onStateChange = (l: () => void) => subscribe(l);
+
 function subscribe(l: () => void) {
   listeners.add(l);
   return () => listeners.delete(l);
@@ -270,9 +303,19 @@ export function useStore<T>(selector: (s: State) => T): T {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', flush);
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
-  // Keep several open tabs in sync.
+  window.addEventListener('pagehide', () => flush(true));
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush(true));
+  // Keep several open tabs in sync (IndexedDB mode).
+  onKvChange(STORAGE_KEY, (value) => {
+    if (demoMode || !value) return;
+    try {
+      state = normalize(JSON.parse(value));
+      listeners.forEach((l) => l());
+    } catch {
+      /* ignore malformed writes from elsewhere */
+    }
+  });
+  // …and in localStorage mode.
   window.addEventListener('storage', (e) => {
     if (demoMode || e.key !== STORAGE_KEY || !e.newValue) return;
     try {
@@ -472,6 +515,54 @@ export const actions = {
     const job = js[index];
     patch('jobs', (all) => all.filter((j) => j.id !== id));
     return () => job && patch('jobs', (all) => [...all.slice(0, index), job, ...all.slice(index)]);
+  },
+
+  /* ---------- Money ---------- */
+  saveTransaction(t: Omit<Transaction, 'id' | 'createdAt'> & { id?: string }): Transaction {
+    const amount = Math.round(Math.abs(t.amount) * 100) / 100;
+    const existing = t.id ? getState().transactions.find((x) => x.id === t.id) : undefined;
+    const tx: Transaction = { ...existing, ...t, amount, id: existing?.id ?? uid(), createdAt: existing?.createdAt ?? Date.now() };
+    patch('transactions', (ts) => (existing ? ts.map((x) => (x.id === tx.id ? tx : x)) : [tx, ...ts]));
+    return tx;
+  },
+  removeTransaction(id: string) {
+    const ts = getState().transactions;
+    const index = ts.findIndex((x) => x.id === id);
+    const tx = ts[index];
+    patch('transactions', (all) => all.filter((x) => x.id !== id));
+    return () => tx && patch('transactions', (all) => (all.some((x) => x.id === id) ? all : [...all.slice(0, index), tx, ...all.slice(index)]));
+  },
+  /** One budget per category: saving another for the same category replaces its limit. */
+  saveBudget(category: string, limit: number) {
+    const amount = Math.round(Math.abs(limit) * 100) / 100;
+    patch('budgets', (bs) => {
+      const i = bs.findIndex((b) => b.category.toLowerCase() === category.toLowerCase());
+      return i >= 0 ? bs.map((b, j) => (j === i ? { ...b, limit: amount } : b)) : [...bs, { id: uid(), category, limit: amount }];
+    });
+  },
+  removeBudget(id: string) {
+    const b = getState().budgets.find((x) => x.id === id);
+    patch('budgets', (bs) => bs.filter((x) => x.id !== id));
+    return () => b && patch('budgets', (bs) => (bs.some((x) => x.id === id) ? bs : [...bs, b]));
+  },
+  saveGoal(g: Omit<SavingsGoal, 'id' | 'createdAt' | 'saved'> & { id?: string; saved?: number }) {
+    patch('savingsGoals', (gs) =>
+      g.id ? gs.map((x) => (x.id === g.id ? { ...x, ...g, id: x.id } : x)) : [...gs, { saved: 0, ...g, id: uid(), createdAt: Date.now() }],
+    );
+  },
+  /** Put money toward a goal (or take it out, with a negative amount). Never below zero. */
+  addToGoal(id: string, amount: number) {
+    patch('savingsGoals', (gs) => gs.map((g) => (g.id === id ? { ...g, saved: Math.max(0, Math.round((g.saved + amount) * 100) / 100) } : g)));
+  },
+  removeGoal(id: string) {
+    const gs = getState().savingsGoals;
+    const index = gs.findIndex((x) => x.id === id);
+    const g = gs[index];
+    patch('savingsGoals', (all) => all.filter((x) => x.id !== id));
+    return () => g && patch('savingsGoals', (all) => (all.some((x) => x.id === id) ? all : [...all.slice(0, index), g, ...all.slice(index)]));
+  },
+  setMoney(p: Partial<State['money']>) {
+    patch('money', (m) => ({ ...m, ...p }));
   },
 
   addPage(p: Partial<NotePage> = {}): NotePage {

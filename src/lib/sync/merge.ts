@@ -68,6 +68,9 @@ const WHAT: Record<CollectionKey | ValueKey, string> = {
   journal: 'Journal day',
   focus: 'Focus log',
   pages: 'Note',
+  transactions: 'Transaction',
+  budgets: 'Budget',
+  savingsGoals: 'Savings goal',
   notes: 'Notes',
   priority: 'Today’s #1 priority',
   reflection: 'End-of-day review',
@@ -75,10 +78,13 @@ const WHAT: Record<CollectionKey | ValueKey, string> = {
   onboarded: 'Setup',
   lastActiveDate: 'Active date',
   week: 'Weekly goals',
+  money: 'Expense settings',
 };
 
 function labelOf(c: CollectionKey, id: string, data: any): string {
   if (!data) return id;
+  if (c === 'transactions') return [data.note || data.category, data.amount, data.date].filter(Boolean).join(' · ') || id;
+  if (c === 'budgets') return `${data.category} budget`;
   if (c === 'jobs') return [data.role, data.company].filter(Boolean).join(' at ') || data.url || id;
   return String(data.title ?? data.name ?? data.label ?? data.date ?? id);
 }

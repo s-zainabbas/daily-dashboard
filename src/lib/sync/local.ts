@@ -1,3 +1,4 @@
+import { kvGet, kvSet } from '../kv';
 import { SYNC_KEY, uid } from '../store';
 import type { GoogleAccount } from '../google/auth';
 import type { CloudData } from './schema';
@@ -13,7 +14,7 @@ export interface SyncMeta {
   syncedHash?: string; // fingerprint of the local data at the last sync, to show "changes waiting"
 }
 
-/** Storage for sync bookkeeping. The real one uses localStorage; tests use memory. */
+/** Storage for sync bookkeeping. The real one uses localStorage and IndexedDB; tests use memory. */
 export interface MetaStore {
   load(): SyncMeta;
   save(m: SyncMeta): void;
@@ -22,7 +23,7 @@ export interface MetaStore {
   saveBackup(json: string): void;
 }
 
-const BASE_KEY = 'daily-dashboard:drive-base';
+export const BASE_KEY = 'daily-dashboard:drive-base';
 /** A copy of this device's data from just before it was replaced by a restore or "use Drive's copy". */
 export const BACKUP_KEY = 'daily-dashboard:before-restore';
 
@@ -52,14 +53,19 @@ export const localMeta: MetaStore = {
   save(m) {
     write(SYNC_KEY, JSON.stringify(m));
   },
+  // The last synced copy and the backup are as big as your data, so they live in IndexedDB (see kv.ts).
   loadBase() {
-    return read<CloudData>(BASE_KEY);
+    try {
+      return JSON.parse(kvGet(BASE_KEY) || 'null');
+    } catch {
+      return null;
+    }
   },
   saveBase(d) {
-    write(BASE_KEY, d ? JSON.stringify(d) : null);
+    kvSet(BASE_KEY, d ? JSON.stringify(d) : null);
   },
   saveBackup(json) {
-    write(BACKUP_KEY, json);
+    kvSet(BACKUP_KEY, json);
   },
 };
 

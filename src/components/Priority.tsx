@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { Check, Play, Target } from 'lucide-react';
 import { actions, useStore } from '../lib/store';
-import { timerActions } from '../lib/timer';
+import { workActions } from '../lib/timer';
 import { toast } from './ui';
 
 export function Priority() {
@@ -61,13 +61,11 @@ export function Priority() {
             <button
               className="btn sm"
               onClick={() => {
-                timerActions.setMode('focus');
-                timerActions.setTask('priority');
-                timerActions.start();
-                document.getElementById('focus')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                workActions.start('priority');
+                document.getElementById('now')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
             >
-              <Play size={12} /> Focus on it
+              <Play size={12} /> Start now
             </button>
           </>
         ) : (

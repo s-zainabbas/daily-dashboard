@@ -165,14 +165,55 @@ export interface FocusDay {
   items?: Record<string, { title: string; minutes: number; projectId?: string }>;
 }
 
+export type TxKind = 'income' | 'expense';
+
+/** Money in or out, on the Expenses tab. Amounts are positive, in `MoneySettings.currency`. */
+export interface Transaction {
+  id: string;
+  kind: TxKind;
+  amount: number;
+  category: string;
+  note?: string;
+  date: DateKey;
+  createdAt: number;
+}
+
+/** A monthly spending cap for one category. */
+export interface Budget {
+  id: string;
+  category: string;
+  limit: number;
+}
+
+/** Something you're saving up for. */
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  target: number;
+  saved: number;
+  /** Optional date you'd like to reach it by. */
+  deadline?: DateKey;
+  createdAt: number;
+}
+
+export interface MoneySettings {
+  /** ISO 4217 code, e.g. "USD". */
+  currency: string;
+  /** Total spending cap per month; undefined = none. */
+  monthlyLimit?: number;
+}
+
 export interface Settings {
   name: string;
   theme: Theme;
   accent: Accent;
   use24h: boolean;
   units: 'c' | 'f';
+  /** Pomodoro lengths from before the "Working on" stopwatch. Kept so older synced data still loads. */
   focusMinutes: number;
   breakMinutes: number;
+  /** Suggest a break after working on one thing this long, in minutes; 0 = never. */
+  nudgeMinutes?: number;
   location?: { name: string; latitude: number; longitude: number };
   sound: boolean;
   /** Minutes before an event to remind you; 0 = off. */
@@ -189,6 +230,10 @@ export interface State {
   habits: Habit[];
   links: QuickLink[];
   jobs: JobApplication[];
+  transactions: Transaction[];
+  budgets: Budget[];
+  savingsGoals: SavingsGoal[];
+  money: MoneySettings;
   /** The original single scratchpad. Kept for older versions; the Notes tab uses `pages`. */
   notes: string;
   pages: NotePage[];

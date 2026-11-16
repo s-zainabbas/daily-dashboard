@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
-import { type LucideIcon, BarChart3, BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, ListTodo, NotebookPen, PanelLeftClose, PanelLeftOpen, Settings as Cog, Sun, Timer } from 'lucide-react';
+import { type LucideIcon, BarChart3, BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, ListTodo, NotebookPen, PanelLeftClose, Wallet, PanelLeftOpen, Settings as Cog, Sun, Timer } from 'lucide-react';
 import { today } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import { useAllEvents } from '../lib/gcal';
-import { remainingMs, useTimer } from '../lib/timer';
-import { fmtClock } from './Focus';
+import { elapsedMs, fmtElapsed, useWork, workTitle } from '../lib/timer';
 import { todayTaskStats } from './Stats';
 import { needsFollowUp, upcomingInterviews } from '../lib/jobs';
+import { budgetStatus, monthOf, monthTotals } from '../lib/money';
 
-export type View = 'today' | 'tasks' | 'schedule' | 'projects' | 'jobs' | 'notes' | 'journal' | 'insights';
+export type View = 'today' | 'tasks' | 'schedule' | 'projects' | 'jobs' | 'notes' | 'journal' | 'insights' | 'money';
 
 export const VIEWS: { id: View; label: string; Icon: LucideIcon }[] = [
   { id: 'today', label: 'Today', Icon: Sun },
@@ -20,6 +20,7 @@ export const VIEWS: { id: View; label: string; Icon: LucideIcon }[] = [
   { id: 'notes', label: 'Notes', Icon: NotebookPen },
   { id: 'journal', label: 'Journal', Icon: BookOpen },
   { id: 'insights', label: 'Insights', Icon: BarChart3 },
+  { id: 'money', label: 'Expenses', Icon: Wallet },
 ];
 
 const VIEW_KEY = 'daily-dashboard:view';
@@ -88,28 +89,37 @@ function useBadges(): Partial<Record<View, { n: number; tone?: 'bad' }>> {
   const tasks = useStore((s) => s.tasks);
   const events = useAllEvents();
   const jobs = useStore((s) => s.jobs);
+  const txs = useStore((s) => s.transactions);
+  const budgets = useStore((s) => s.budgets);
+  const money = useStore((s) => s.money);
   const t = today();
   const ts = todayTaskStats(tasks, t);
   const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const eventsLeft = events.filter((e) => e.date === t && (!e.start || (e.end ?? e.start) >= hm)).length;
   const interviews = upcomingInterviews(jobs, t).length + jobs.filter((j) => needsFollowUp(j, t)).length;
+  // Budgets (and the monthly limit) you've gone over this month.
+  const m = monthOf(t);
+  const overBudget =
+    budgetStatus(budgets, txs, m, t).filter((b) => b.over).length + (money.monthlyLimit && monthTotals(txs, m).expenses > money.monthlyLimit ? 1 : 0);
   return {
     today: ts.open ? { n: ts.open } : undefined,
     tasks: ts.overdue ? { n: ts.overdue, tone: 'bad' } : undefined,
     schedule: eventsLeft ? { n: eventsLeft } : undefined,
     jobs: interviews ? { n: interviews } : undefined,
+    money: overBudget ? { n: overBudget, tone: 'bad' } : undefined,
   };
 }
 
 function TimerPill({ onClick }: { onClick: () => void }) {
-  const timer = useTimer();
+  const work = useWork();
   useNow(1000);
-  const label = fmtClock(remainingMs(timer));
+  const label = fmtElapsed(elapsedMs(work));
+  const title = workTitle(work.taskId) ?? 'Working';
   return (
-    <button className="side-timer" onClick={onClick} data-tip={`${timer.mode === 'focus' ? 'Focus' : 'Break'} · ${label}`}>
+    <button className="side-timer" onClick={onClick} data-tip={`${title} · ${label}`}>
       <Timer size={16} />
       <span className="side-label num">
-        {label} <small>{timer.mode === 'focus' ? 'Focus' : 'Break'}</small>
+        {label} <small className="truncate">{title}</small>
       </span>
     </button>
   );
@@ -123,7 +133,7 @@ export function Sidebar({ view, onView, collapsed, onToggle, onSettings }: {
   onSettings: () => void;
 }) {
   const badges = useBadges();
-  const running = !!useTimer().endsAt;
+  const running = !!useWork().startedAt;
 
   return (
     <nav className={`sidebar ${collapsed ? 'collapsed' : ''}`} aria-label="Sections">

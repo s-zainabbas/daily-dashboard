@@ -152,7 +152,7 @@ function ReviewFlow({ onClose }: { onClose: () => void }) {
           <>
             <label className="field">
               <span>What went well this week?</span>
-              <textarea className="textarea" rows={3} autoFocus value={wentWell} onChange={(e) => setWentWell(e.target.value)} placeholder="Wins, good habits, things to keep doing" />
+              <textarea className="textarea" rows={3} autoFocus data-autofocus value={wentWell} onChange={(e) => setWentWell(e.target.value)} placeholder="Wins, good habits, things to keep doing" />
             </label>
             <label className="field">
               <span>What would you change next week?</span>
@@ -181,6 +181,7 @@ function ReviewFlow({ onClose }: { onClose: () => void }) {
                     className="input"
                     value={g}
                     autoFocus={i === 0}
+                    data-autofocus={i === 0 || undefined}
                     maxLength={120}
                     placeholder={['The big one', 'Something to move forward', 'Something for you'][i]}
                     onChange={(e) => setGoals((xs) => xs.map((x, j) => (j === i ? e.target.value : x)))}

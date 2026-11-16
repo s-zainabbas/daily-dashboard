@@ -5,7 +5,7 @@ import { useAllEvents } from '../lib/gcal';
 import { useNow } from '../lib/hooks';
 import { applyPlan, candidates, freeMinutes, overdue, planned, type Triage } from '../lib/plan';
 import { actions, getState, setState, useStore } from '../lib/store';
-import { timerActions } from '../lib/timer';
+import { workActions } from '../lib/timer';
 import type { Task } from '../lib/types';
 import { Dialog, DialogHead, toast } from './ui';
 
@@ -276,13 +276,12 @@ function PlanFlow({ onClose }: { onClose: () => void }) {
                   type="button"
                   className="btn primary"
                   onClick={() => {
-                    timerActions.setMode('focus');
-                    timerActions.start();
-                    toast(`Focusing on “${summary.title}”`);
+                    workActions.start('priority');
+                    toast(`Working on “${summary.title}”`);
                     onClose();
                   }}
                 >
-                  <Play size={14} /> Start focusing on #1
+                  <Play size={14} /> Start on #1 now
                 </button>
               )}
             </div>

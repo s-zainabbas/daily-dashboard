@@ -12,7 +12,7 @@ export function Notes() {
   // Local draft so typing never gets overwritten by a re-render (a bug in the original).
   const [draft, setDraft] = useState(notes);
   const [saved, setSaved] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const focused = useRef(false);
 
   useEffect(() => {
@@ -121,7 +121,7 @@ export function Links() {
         >
           <label className="field">
             <span>URL</span>
-            <input className="input" autoFocus required value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="figma.com" />
+            <input className="input" autoFocus data-autofocus required value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="figma.com" />
             {form.url && !url && <small style={{ color: 'var(--bad)' }}>Enter a web address (http or https).</small>}
           </label>
           <label className="field">
@@ -235,7 +235,7 @@ export function ProjectEditor({ project, onClose }: { project: Project | 'new' |
       >
         <label className="field">
           <span>Name</span>
-          <input className="input" autoFocus required value={form.name} onChange={(e) => set({ name: e.target.value })} />
+          <input className="input" autoFocus data-autofocus required value={form.name} onChange={(e) => set({ name: e.target.value })} />
         </label>
         <div className="field">
           <span>Status</span>

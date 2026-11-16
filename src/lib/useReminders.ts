@@ -5,6 +5,7 @@ import { useAllEvents } from './gcal';
 import { dueReminders, loadFired, saveFired } from './reminders';
 import { actions, demoMode, getState } from './store';
 import { chime } from './timer';
+import { notify } from './notify';
 
 /** Check for due reminders every 20 seconds and show them: chime, on-screen message and, in the background, a notification. */
 export function useReminders() {
@@ -38,13 +39,7 @@ export function useReminders() {
             : undefined,
           15_000,
         );
-        if ('Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-          try {
-            new Notification(r.title, { body: r.body, icon: './icon-192.png', tag: r.key });
-          } catch {
-            /* some browsers only allow notifications from a service worker */
-          }
-        }
+        if (document.visibilityState !== 'visible') notify(r.title, { body: r.body, tag: r.key });
       }
       saveFired(t, fired);
     };

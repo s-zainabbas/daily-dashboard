@@ -129,7 +129,7 @@ function NoteEditor({ page }: { page: NotePage }) {
   const [mode, setModeState] = useState<'edit' | 'preview'>(() => (read(MODE_KEY) === 'preview' ? 'preview' : 'edit'));
   const ref = useRef<HTMLTextAreaElement>(null);
   const focused = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const latest = useRef({ title, body });
   latest.current = { title, body };
 

@@ -39,7 +39,12 @@ export function Dialog({ open, onClose, className = 'modal', children, label }: 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      d.showModal();
+      // React's autoFocus fires while the dialog is still hidden, so the browser would otherwise
+      // land on the first button (usually Close). Fields marked data-autofocus get focus instead.
+      d.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    }
     if (!open && d.open) d.close();
   }, [open]);
   return (
