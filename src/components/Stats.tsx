@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { CalendarClock, Timer } from 'lucide-react';
-import { dateKey, formatDuration, formatTime, lastDays, nowMinutes, toMinutes, today } from '../lib/date';
+import { CalendarClock } from 'lucide-react';
+import { dateKey, formatDuration, formatTime, nowMinutes, toMinutes, today } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import { todayHabits } from '../lib/habits';
@@ -29,7 +29,6 @@ export function Stats() {
   const tasks = useStore((s) => s.tasks);
   const events = useAllEvents();
   const habits = useStore((s) => s.habits);
-  const focus = useStore((s) => s.focus);
   const use24h = useStore((s) => s.settings.use24h);
   const t = dateKey(now);
 
@@ -38,9 +37,6 @@ export function Stats() {
   const th = todayHabits(habits, t);
   const habitsDone = th.done.length;
   const habitsOn = th.on.length;
-  const week = lastDays(7, t).map((d) => focus[d]?.minutes ?? 0);
-  const maxWeek = Math.max(60, ...week);
-  const f = focus[t];
 
   return (
     <div className="stats">
@@ -74,24 +70,6 @@ export function Stats() {
                 ? `${formatTime(next.start!, use24h)} · in ${formatDuration(toMinutes(next.start!) - m)}`
                 : 'No more events today'}
           </div>
-        </div>
-      </div>
-
-      <div className="card stat">
-        <div className="stat-icon">
-          <Timer size={20} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div className="label">Focus today</div>
-          <div className="value num">{formatDuration(f?.minutes ?? 0)}</div>
-          <div className="sub">
-            {f?.sessions ?? 0} session{f?.sessions === 1 ? '' : 's'}
-          </div>
-        </div>
-        <div className="spark" aria-label="Focus minutes over the last 7 days">
-          {week.map((v, i) => (
-            <i key={i} className={v ? 'on' : ''} style={{ height: `${Math.max(10, (v / maxWeek) * 100)}%`, opacity: i === 6 ? 1 : 0.55 }} />
-          ))}
         </div>
       </div>
 

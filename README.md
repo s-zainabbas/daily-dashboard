@@ -1,6 +1,6 @@
 # Daily Dashboard
 
-A calm, fast command center for your day: one priority, your tasks, today's schedule, a focus timer, habits, notes and an end-of-day journal — all on one screen.
+A calm, fast command center for your day: one priority, your tasks, today's schedule, what to work on right now, habits, notes and an end-of-day journal — all on one screen.
 
 Offline-first and private: everything is stored in your browser. Optionally connect **your own Google Drive** to keep the same data on your laptop, phone and anywhere else. No server, no tracking.
 
@@ -12,28 +12,29 @@ Offline-first and private: everything is stored in your browser. Optionally conn
 
 | | |
 |---|---|
-| **Sidebar with tabs** | Today, Tasks, Schedule, Projects, Jobs, Notes, Journal and Insights, with badges for what's waiting. Switch with `1`–`8`; `[` folds it to icons. Becomes a bottom tab bar on phones. **Today fits on one screen** on a laptop: long cards scroll inside themselves. |
+| **Sidebar with tabs** | Today, Tasks, Schedule, Projects, Jobs, Notes, Journal, Insights and Expenses, with badges for what's waiting. Switch with `1`–`9`; `[` folds it to icons. Becomes a bottom tab bar on phones. **Today fits on one screen** on a laptop: long cards scroll inside themselves. |
 | **Plan my day** | Press `P` for a one-minute morning routine: sort out overdue tasks, pick today's tasks (with your free time from the calendar), set your #1 priority. Undo included. |
 | **Shutdown routine** | Press `S` (or use the evening prompt on Today) to close the day: see what you got done, tick off leftover habits, give unfinished tasks a new home, write what shipped (pre-filled from completed tasks), and set tomorrow's #1, which is waiting for you in the morning. |
 | **Natural-language quick add** | Type `Call Sam tomorrow !high` or `Dentist fri 3-4pm`. A live preview shows what it understood: task or event, date, time, priority. |
-| **Today's #1 priority** | One thing that would make today a win, with a one-click "Focus on it". |
+| **Today's #1 priority** | One thing that would make today a win, with a one-click "Start now". |
 | **Tasks** | Grouped into Overdue / Today / Upcoming / Anytime / Waiting on others. Priorities, projects, notes, undo on delete. **Checklists** (paste a list to add several steps), **time estimates** (`Write report 2h`), **reminders** (`Call mum remind 3pm`), **snooze** (tomorrow / next week / a date) and **drag to reorder** — dropping a task into Today or Anytime changes its date. |
 | **Schedule** | Day agenda with a "now" line, free-time gaps and a peek at tomorrow, or a **week view**: drag a task onto a time slot to block time for it, drag your events to move them, double-click to add one. |
-| **Focus timer** | Pomodoro based on timestamps, so it stays accurate in background tabs and across reloads. Countdown in the tab title, chime, notification, daily focus log, minutes credited to the task you picked. `Shift+F` for **full-screen focus mode**. |
+| **Now** | Where you are in your day (in a meeting, free for 1h 20m until the next one) and the one thing to do with that time: your #1, then overdue, due-today and undated tasks by priority, preferring ones that fit before your next event. **Start working** and a stopwatch counts up; **Done**, **Stop** or **Switch** credit the time to that task (shown in Insights and the Journal). Time on the tab title and in the sidebar, a gentle break suggestion after 50 minutes (adjustable), and forgotten timers are capped at 4 hours. |
 | **Habits** | 7-day grid with streaks that forgive an unticked "today". Habits on **chosen days** (Gym Mon/Wed/Fri — streaks skip rest days), **counted habits** (8 glasses of water) and a **90-day heatmap** with success rate and best streak. |
 | **Projects** | Status, progress and the single next action. The Projects tab shows each project with its own task list; tasks added there are linked to it. |
 | **Jobs applied** | List or **board** (drag between Applied → Interview → Offer → Rejected). **Follow up?** nudges after a week with no news, **interview dates** that show in Schedule with a reminder, contact and salary. |
 | **Job links** | Paste a job link and it's saved with the company, position and location filled in. Track status (applied, interview, offer, rejected), add notes, and keep a copy of the job description in case the posting comes down before your interview. |
 | **Weekly review** | Press `W` (or use the prompt Friday afternoon to Monday morning): see the week's focus, tasks, habits and mood, reflect, and set up to 3 goals that sit on Today all week. |
+| **Expenses** | Add income and expenses (amount, category, date, note; your own categories too), in your currency. See the month's income, spending, what you saved and your balance; a **monthly spending limit** with what's left and a safe amount per day; a **spending pace** chart against that limit; where the money went by category; income vs expenses for the last six months; **budgets** per category with warnings when you go over; **savings goals** with progress and how much to put aside each month to hit a date; and a searchable **transaction history** by day. Browse past months, edit or delete anything (with Undo). On **Today**, a Spending card shows the month against your limit, what went out today, a safe amount per day and any budget you've gone over, with + to log an expense without leaving the page. Synced with Google Drive like everything else. |
 | **Insights** | Focus and tasks per day, where your focus went (by task or project), mood, habit success and job applications — for 7, 30 or 90 days, with a "Show numbers" table under every chart. |
 | **Notes** | Multiple notes with pinning and search. Light formatting: `# heading`, `**bold**`, `- list`, `- [ ] checkbox` (tick it in Preview), links. |
 | **End-of-day review → Journal** | Mood, what shipped, what slipped. At midnight the day is saved to a journal with your priority, tasks completed and focus time; "carry to tomorrow" becomes a task. |
 | **Quick links** | Your everyday sites as icons in the top bar. Edit them on the Notes tab. |
 | **Weather** | Local conditions with high/low and rain chance (Open-Meteo, no API key). |
 | **Command menu** | `⌘K` to run any action, or **search everything**: tasks, notes, projects, jobs, events and journal days. |
-| **Keyboard first** | `/` quick add · `N` task · `E` event · `P` plan my day · `S` shut down · `W` weekly review · `F` focus · `⇧F` focus mode · `J` journal · `T` theme · `1`–`8` tabs · `?` all shortcuts |
+| **Keyboard first** | `/` quick add · `N` task · `E` event · `P` plan my day · `S` shut down · `W` weekly review · `J` journal · `T` theme · `1`–`9` tabs · `?` all shortcuts |
 | **Themes** | Light, dark or system, with five accent colours. |
-| **Installable PWA** | Works offline; install it to your dock or home screen. Long-press the icon for shortcuts: New task, Plan my day, Focus, Shut down. |
+| **Installable PWA** | Works offline; install it to your dock or home screen. Long-press the icon for shortcuts: New task, Plan my day, Now, Shut down. |
 | **Google Drive sync** | Connect your Google account and the dashboard is saved to a hidden app folder in your own Drive. Edits sync a few seconds later; other devices pick them up when they open or come back online. Changes made on two devices are merged, and if the same thing was changed in both places you choose which to keep. Restore any recent version. |
 | **Google Calendar** | Your Google Calendar events show in Schedule, the "Next up" card and the sidebar, next to your own events, in each calendar's colour. Read-only and never copied into your data; click one to open it in Google Calendar. Choose which calendars to show in Settings. |
 | **Repeating tasks** | `Gym every mon wed fri`, `Pay rent monthly`, or set it in the task editor. Ticking one off adds the next; Undo and Skip included. |
@@ -41,14 +42,14 @@ Offline-first and private: everything is stored in your browser. Optionally conn
 
 ## Tech
 
-- **React 18 + TypeScript (strict)**, built with **Vite**
-- No state library: a small external store on `useSyncExternalStore`, with debounced persistence, cross-tab sync and versioned migrations
+- **React 19 + TypeScript (strict)**, built with **Vite 8**
+- No state library: a small external store on `useSyncExternalStore`, with debounced persistence, cross-tab sync and versioned migrations. Your data is kept in **IndexedDB** (no 5 MB browser storage limit); data from older versions is moved over automatically (`src/lib/kv.ts`)
 - Hand-written CSS design system (tokens, light/dark, container queries, reduced-motion support); Geist + Instrument Serif fonts, bundled for offline use
 - Accessible by default: native `<dialog>` for modals (focus trap, Esc), labelled controls, visible focus rings
 - **Vitest** unit tests for the date logic, natural-language parser, job-link parsing, legacy migration and day rollover
 - Job links are looked up with the public Greenhouse, Lever and Ashby job APIs; other sites (LinkedIn, Indeed, career pages) go through [Microlink](https://microlink.io)'s free link-preview API. Only the job link is sent, nothing else
 - Optional Google Drive sync with Google Identity Services (token model) and the Drive API's `appDataFolder` — no server, no SDK. See [Google Drive sync](#google-drive-sync)
-- Service worker for offline use; GitHub Actions workflow that tests, builds and deploys to GitHub Pages
+- Service worker for offline use, with a cache per release (old releases' files are cleaned up) and notifications that work on phones; GitHub Actions workflow that tests, builds and deploys to GitHub Pages
 
 ```
 src/
@@ -96,6 +97,8 @@ Uses the same Google Cloud project and Client ID:
 2. **Google Auth Platform → Data Access → Add or remove scopes** → tick `.../auth/calendar.readonly` → **Update → Save**.
    This one is a *sensitive* scope. While the app stays in *Testing* with you as a test user, no Google review is needed; Google just shows an "unverified app" notice on the permission screen, which you can continue past.
 3. In the dashboard: **Settings → Google Calendar → Connect Google Calendar**, then tick the calendars to show.
+
+**Reminders when the dashboard is closed (optional).** A browser tab can't alert you once it's closed, so the dashboard can copy your reminders into your main Google Calendar, and Google notifies you on your phone and laptop. Add the scope `.../auth/calendar.events` the same way as step 2 (also *sensitive*, same notice), then **Settings → Google Calendar → Send reminders to Google Calendar**. Task reminders, your own timed events and job interviews for the next 30 days are added with a pop-up alert, and updated or removed when you edit, tick off or delete them here. Only events the dashboard added are ever changed. Code: `src/lib/phoneReminders.ts`.
 
 Events from last week to two months ahead are fetched when the dashboard opens, every 5 minutes while it's open, and when you come back to the tab. They're cached on the device so they show offline. Like Drive sync, Google's sign-in lasts about an hour; after that the Schedule shows a **Reconnect** button. Code: `src/lib/google/calendar.ts` (API and event conversion), `src/lib/gcal.ts` (fetching, cache, merging), `src/components/CalendarSettings.tsx`.
 

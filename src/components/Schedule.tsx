@@ -289,7 +289,7 @@ export function EventEditor({ event, defaultDate, defaultStart, onClose }: { eve
       <form className="modal-body" onSubmit={save}>
         <label className="field">
           <span>Title</span>
-          <input className="input" autoFocus required value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="What’s happening?" />
+          <input className="input" autoFocus data-autofocus required value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="What’s happening?" />
         </label>
         <div className="row">
           <label className="field">

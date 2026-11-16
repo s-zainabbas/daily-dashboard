@@ -3,7 +3,6 @@ import { Download, Flame, LocateFixed, Minus, Plus, Search, Upload } from 'lucid
 import { today } from '../lib/date';
 import { demoState } from '../lib/demo';
 import { actions, emptyState, getState, replaceState, useStore } from '../lib/store';
-import { timerActions } from '../lib/timer';
 import type { Accent, Theme } from '../lib/types';
 import { clearWeatherCache, searchPlaces, type Place } from '../lib/weather';
 import { useDriveSync } from '../lib/sync/driveSync';
@@ -134,45 +133,20 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
         <RemindersSection />
 
         <section>
-          <h3>Focus timer</h3>
+          <h3>Working on</h3>
           <div className="setting">
             <div>
-              <b>Focus length</b>
+              <b>Suggest a break after</b>
+              <small>{(s.nudgeMinutes ?? 50) ? 'On one task without stopping' : 'Off: no break reminders'}</small>
             </div>
-            <Stepper
-              value={s.focusMinutes}
-              min={5}
-              max={120}
-              step={5}
-              unit="min"
-              onChange={(v) => {
-                actions.setSettings({ focusMinutes: v });
-                timerActions.syncLength();
-              }}
-            />
+            <Stepper value={s.nudgeMinutes ?? 50} min={0} max={180} step={10} unit="min" onChange={(v) => actions.setSettings({ nudgeMinutes: v })} />
           </div>
           <div className="setting">
             <div>
-              <b>Break length</b>
+              <b>Chime</b>
+              <small>For reminders and break suggestions, plus a notification if you allow it</small>
             </div>
-            <Stepper
-              value={s.breakMinutes}
-              min={1}
-              max={30}
-              step={1}
-              unit="min"
-              onChange={(v) => {
-                actions.setSettings({ breakMinutes: v });
-                timerActions.syncLength();
-              }}
-            />
-          </div>
-          <div className="setting">
-            <div>
-              <b>Chime when done</b>
-              <small>Plus a notification if you allow it</small>
-            </div>
-            <Switch label="Chime when done" checked={s.sound} onChange={(v) => actions.setSettings({ sound: v })} />
+            <Switch label="Chime" checked={s.sound} onChange={(v) => actions.setSettings({ sound: v })} />
           </div>
         </section>
 
@@ -271,11 +245,9 @@ export const SHORTCUTS: [string[], string][] = [
   [['P'], 'Plan my day'],
   [['S'], 'Shut down for the day'],
   [['W'], 'Weekly review'],
-  [['⇧', 'F'], 'Full-screen focus mode'],
   [['/'], 'Quick add'],
   [['N'], 'New task'],
   [['E'], 'New event'],
-  [['F'], 'Start / pause focus timer'],
   [['J'], 'Journal'],
   [['T'], 'Toggle light / dark'],
   [['?'], 'Show shortcuts'],

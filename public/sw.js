@@ -1,13 +1,25 @@
 // Offline support: pages are network-first, built assets are cache-first.
-const CACHE = 'daily-dashboard-v2';
+// `__BUILD__` and `__ASSETS__` are filled in by the build (see vite.config.ts), so every release gets
+// its own cache and the previous release's files are deleted once the new one takes over.
+const BUILD = '__BUILD__';
+const CACHE = `daily-dashboard-${BUILD}`;
+const ASSETS = /** @type {string[]} */ (__ASSETS__);
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html'])).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(['./', './index.html', ...ASSETS]).catch(() => c.addAll(['./', './index.html'])))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('daily-dashboard') && k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -20,7 +32,10 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(request)
         .then((res) => {
-          caches.open(CACHE).then((c) => c.put('./index.html', res.clone()));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put('./index.html', copy));
+          }
           return res;
         })
         .catch(() => caches.match('./index.html')),
@@ -40,5 +55,16 @@ self.addEventListener('fetch', (e) => {
           return res;
         }),
     ),
+  );
+});
+
+// Tapping a reminder or timer notification brings the dashboard to the front (or opens it).
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const open = wins.find((w) => new URL(w.url).pathname.startsWith(new URL(self.registration.scope).pathname));
+      return open ? open.focus() : self.clients.openWindow('./');
+    }),
   );
 });

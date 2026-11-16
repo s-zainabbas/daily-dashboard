@@ -37,7 +37,7 @@ export function Onboarding({ open }: { open: boolean }) {
         <label className="sr-only" htmlFor="onboard-name">
           Your first name
         </label>
-        <input id="onboard-name" className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What should we call you?" maxLength={40} />
+        <input id="onboard-name" className="input" autoFocus data-autofocus value={name} onChange={(e) => setName(e.target.value)} placeholder="What should we call you?" maxLength={40} />
         <div className="onboard-actions">
           <button className="btn primary">Start my day</button>
           {driveConfigured && <ConnectButton className="btn" label="Restore from Google Drive" />}

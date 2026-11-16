@@ -329,7 +329,7 @@ function JobEditor({ job, onClose }: { job: JobApplication | 'new' | null; onClo
         <div className="row">
           <label className="field">
             <span>Company</span>
-            <input className="input" autoFocus={!init} value={form.company} onChange={(e) => set({ company: e.target.value })} placeholder="Acme Inc." />
+            <input className="input" autoFocus={!init} data-autofocus={!init || undefined} value={form.company} onChange={(e) => set({ company: e.target.value })} placeholder="Acme Inc." />
           </label>
           <label className="field">
             <span>Position</span>

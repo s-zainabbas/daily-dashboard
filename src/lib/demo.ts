@@ -1,5 +1,5 @@
 import { mondayOf } from './week';
-import { addDays, fromMinutes, nowMinutes, today } from './date';
+import { addDays, dateKey, fromMinutes, nowMinutes, today } from './date';
 import { emptyState, uid } from './store';
 import type { State } from './types';
 
@@ -120,5 +120,47 @@ export function demoState(name = 'Zain'): State {
         focusMinutes: f?.minutes ?? 0,
       });
   }
+
+  // Money: about six months of income and spending, a limit, budgets and two savings goals.
+  s.money = { currency: 'USD', monthlyLimit: 2600 };
+  const day = (monthsBack: number, d: number) => {
+    const base = new Date(t + 'T12:00');
+    const x = new Date(base.getFullYear(), base.getMonth() - monthsBack, d);
+    return dateKey(x);
+  };
+  const spend: [string, string, number][] = [
+    ['Groceries', 'Weekly shop', 86],
+    ['Food & dining', 'Lunch with Sam', 24],
+    ['Transport', 'Train pass top-up', 40],
+    ['Subscriptions', 'Music + cloud storage', 17],
+    ['Food & dining', 'Coffee', 6],
+    ['Shopping', 'Running shoes', 120],
+    ['Entertainment', 'Cinema', 28],
+    ['Health', 'Pharmacy', 18],
+    ['Groceries', 'Market', 52],
+    ['Bills & utilities', 'Phone bill', 35],
+  ];
+  for (let mb = 0; mb < 6; mb++) {
+    const lastDay = mb === 0 ? Number(t.slice(8)) : 28;
+    s.transactions.push({ id: uid(), kind: 'income', amount: 4200, category: 'Salary', note: 'Salary', date: day(mb, 1), createdAt: 0 });
+    s.transactions.push({ id: uid(), kind: 'expense', amount: 1350, category: 'Housing', note: 'Rent', date: day(mb, 1), createdAt: 0 });
+    s.transactions.push({ id: uid(), kind: 'expense', amount: 95 + mb * 7, category: 'Bills & utilities', note: 'Electricity & internet', date: day(mb, 3), createdAt: 0 });
+    if (mb % 2 === 1) s.transactions.push({ id: uid(), kind: 'income', amount: 450 + mb * 60, category: 'Freelance', note: 'Logo project', date: day(mb, 14), createdAt: 0 });
+    if (mb === 3) s.transactions.push({ id: uid(), kind: 'expense', amount: 640, category: 'Travel', note: 'Weekend in Lisbon', date: day(mb, 20), createdAt: 0 });
+    for (let d = 2, i = mb; d <= lastDay; d += 2, i++) {
+      const [category, note, amount] = spend[(i * 7) % spend.length];
+      s.transactions.push({ id: uid(), kind: 'expense', amount: Math.round(amount * (0.8 + ((i * 13) % 5) / 10) * 100) / 100, category, note, date: day(mb, d), createdAt: i });
+    }
+  }
+  s.budgets = [
+    { id: uid(), category: 'Groceries', limit: 450 },
+    { id: uid(), category: 'Food & dining', limit: 180 },
+    { id: uid(), category: 'Shopping', limit: 200 },
+    { id: uid(), category: 'Entertainment', limit: 120 },
+  ];
+  s.savingsGoals = [
+    { id: uid(), name: 'Emergency fund', target: 10000, saved: 6200, createdAt: 0 },
+    { id: uid(), name: 'New laptop', target: 2400, saved: 900, deadline: day(-4, 28), createdAt: 0 },
+  ];
   return s;
 }

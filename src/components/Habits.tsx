@@ -119,7 +119,7 @@ function HabitEditor({ habit, onClose }: { habit: Habit | 'new' | null; onClose:
       >
         <label className="field">
           <span>Habit</span>
-          <input className="input" autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Meditate 10 minutes" />
+          <input className="input" autoFocus data-autofocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Meditate 10 minutes" />
         </label>
         <div className="field">
           <span>On these days</span>
