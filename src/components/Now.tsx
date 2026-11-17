@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRightLeft, CalendarClock, Check, Coffee, Compass, Play, Square, Sparkles } from 'lucide-react';
+import { Maximize2, ArrowRightLeft, CalendarClock, Check, Coffee, Compass, Play, Square, Sparkles } from 'lucide-react';
 import { dateKey, dueLabel, formatDuration, formatTime, nowMinutes } from '../lib/date';
 import { useAllEvents } from '../lib/gcal';
 import { useNow } from '../lib/hooks';
@@ -7,6 +7,7 @@ import { candidates, moment, type Pick } from '../lib/now';
 import { useStore } from '../lib/store';
 import { elapsedMs, fmtElapsed, MAX_MINUTES, workActions, workTitle, type Logged, useWork } from '../lib/timer';
 import { Card, toast } from './ui';
+import { FOCUS_EVENT } from './FocusMode';
 
 /** Say what was logged after stopping, with the right words for a forgotten timer. */
 export function loggedToast(l: Logged | undefined, done = false) {
@@ -45,6 +46,11 @@ export function Now() {
       title="Now"
       icon={<Compass size={16} />}
       meta={<span className="num">{formatTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, s.settings.use24h)}</span>}
+      actions={
+        <button className="icon-btn sm" onClick={() => window.dispatchEvent(new CustomEvent(FOCUS_EVENT))} aria-label="Focus mode" title="Focus mode · F">
+          <Maximize2 size={14} />
+        </button>
+      }
     >
       <MomentLine m={m} use24h={s.settings.use24h} />
 

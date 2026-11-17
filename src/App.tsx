@@ -20,6 +20,12 @@ import { ScheduleTab } from './components/WeekPlanner';
 import { QuickAdd } from './components/QuickAdd';
 import { Schedule } from './components/Schedule';
 import { Stats } from './components/Stats';
+import { CountdownDialogs, CountdownStrip } from './components/Countdowns';
+import { RoutinesCard } from './components/Routines';
+import { FOCUS_EVENT, FocusMode } from './components/FocusMode';
+import { AutoPlanDialog } from './components/AutoPlan';
+import { ShareCapture } from './components/ShareCapture';
+import { StarredMailCard } from './components/Gmail';
 import { Tasks } from './components/Tasks';
 import { TopBar } from './components/TopBar';
 import { DriveDialogs, syncStatus } from './components/DriveSync';
@@ -34,7 +40,7 @@ import { loggedToast } from './components/Now';
 import { checkNudge, chime, elapsedMs, fmtElapsed, useWork, workActions, workTitle } from './lib/timer';
 import { notify } from './lib/notify';
 
-type Panel = 'palette' | 'journal' | 'settings' | 'shortcuts' | 'plan' | 'shutdown' | 'week' | null;
+type Panel = 'palette' | 'journal' | 'settings' | 'shortcuts' | 'plan' | 'shutdown' | 'week' | 'focus' | null;
 
 export default function App() {
   const onboarded = useStore((s) => s.onboarded);
@@ -121,6 +127,7 @@ export default function App() {
         setTimeout(() => document.getElementById('now')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
       },
       weekly: () => setPanel('week'),
+      focus: () => setPanel('focus'),
       journal: () => setView('journal'),
       settings: () => setPanel('settings'),
       shortcuts: () => setPanel('shortcuts'),
@@ -138,7 +145,7 @@ export default function App() {
     params.delete('action');
     const qs = params.toString();
     history.replaceState(null, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash}`);
-    const run: Record<string, () => void> = { 'new-task': handlers.newTask, plan: handlers.plan, focus: handlers.now, shutdown: handlers.shutdown, weekly: handlers.weekly };
+    const run: Record<string, () => void> = { 'new-task': handlers.newTask, plan: handlers.plan, focus: handlers.now, 'focus-mode': handlers.focus, shutdown: handlers.shutdown, weekly: handlers.weekly };
     setTimeout(() => run[action]?.(), 50);
   }, [handlers]);
 
@@ -149,7 +156,7 @@ export default function App() {
         setPanel((p) => (p === 'palette' ? null : 'palette'));
         return;
       }
-      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || document.querySelector('dialog[open]')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || document.querySelector('dialog[open], .focus-mode')) return;
       const k = e.key;
       const map: Record<string, () => void> = {
         '/': handlers.quickAdd,
@@ -159,6 +166,7 @@ export default function App() {
         p: handlers.plan,
         s: handlers.shutdown,
         w: handlers.weekly,
+        f: handlers.focus,
         '?': handlers.shortcuts,
         '[': toggleSidebar,
         t: () => actions.setSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' }),
@@ -182,6 +190,18 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onKey]);
+
+  // Buttons elsewhere that open focus mode or Plan my day.
+  useEffect(() => {
+    const focus = () => setPanel('focus');
+    const plan = () => setPanel('plan');
+    window.addEventListener(FOCUS_EVENT, focus);
+    window.addEventListener('dd:plan-day', plan);
+    return () => {
+      window.removeEventListener(FOCUS_EVENT, focus);
+      window.removeEventListener('dd:plan-day', plan);
+    };
+  }, []);
 
   const close = () => setPanel(null);
 
@@ -228,8 +248,12 @@ export default function App() {
       <PlanDay open={panel === 'plan'} onClose={close} />
       <Shutdown open={panel === 'shutdown'} onClose={close} />
       <WeeklyReview open={panel === 'week'} onClose={close} />
+      <FocusMode open={panel === 'focus'} onClose={close} />
+      <AutoPlanDialog />
+      <ShareCapture />
       <Onboarding open={!onboarded} />
       <DriveDialogs />
+      <CountdownDialogs />
       <Toasts />
     </>
   );
@@ -265,6 +289,7 @@ function ViewBody({ view, evening, taskReq, eventReq, onTaskHandled, onEventHand
             <ShutdownPrompt onStart={onShutdown} />
             <WeeklyPrompt onStart={onWeekly} />
           </div>
+          <CountdownStrip />
           <Stats />
           <main className="grid">
             <div className="col col-a">
@@ -278,6 +303,7 @@ function ViewBody({ view, evening, taskReq, eventReq, onTaskHandled, onEventHand
             </div>
             <div className="col col-c">
               <Now />
+              <RoutinesCard />
               <SpendingCard onOpen={onMoney} />
               <Habits />
             </div>
@@ -289,6 +315,7 @@ function ViewBody({ view, evening, taskReq, eventReq, onTaskHandled, onEventHand
         <main className="view-split" aria-label={title}>
           <div className="col">{tasks}</div>
           <div className="col">
+            <StarredMailCard />
             <Priority />
             <Projects />
           </div>

@@ -18,13 +18,16 @@ import type { State } from '../types';
  * - No tokens or secrets are ever written here.
  */
 
-/** 2: adds transactions, budgets, savingsGoals and money. Older apps refuse it instead of dropping them. */
-export const SCHEMA_VERSION = 2;
+/**
+ * 2: adds transactions, budgets, savingsGoals and money. 3: adds countdowns and routines.
+ * Older apps refuse a newer file (and ask to reload) instead of dropping what they don't know.
+ */
+export const SCHEMA_VERSION = 3;
 export const APP_ID = 'daily-dashboard';
 const TOMBSTONE_DAYS = 90;
 
 /** Lists of records with ids. Journal and focus are keyed by date. */
-export const COLLECTIONS = ['tasks', 'events', 'projects', 'habits', 'links', 'jobs', 'journal', 'focus', 'pages', 'transactions', 'budgets', 'savingsGoals'] as const;
+export const COLLECTIONS = ['tasks', 'events', 'projects', 'habits', 'links', 'jobs', 'journal', 'focus', 'pages', 'transactions', 'budgets', 'savingsGoals', 'countdowns', 'routines'] as const;
 /** Single values. */
 export const VALUES = ['notes', 'priority', 'reflection', 'settings', 'onboarded', 'lastActiveDate', 'week', 'money'] as const;
 export type CollectionKey = (typeof COLLECTIONS)[number];

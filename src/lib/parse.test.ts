@@ -90,8 +90,9 @@ describe('parseQuick — repeats', () => {
     expect(parseQuick('Renew insurance yearly !high', REF)).toMatchObject({ title: 'Renew insurance', priority: 'high', repeat: { freq: 'yearly' } });
   });
 
-  it('keeps a repeating item a task, with any time left in the title', () => {
-    expect(parseQuick('Standup 9:30 every weekday', REF)).toMatchObject({ kind: 'task', title: 'Standup 9:30', repeat: { freq: 'weekdays' } });
+  it('a repeating item with a time is a repeating event', () => {
+    expect(parseQuick('Standup 9:30 every weekday', REF)).toMatchObject({ kind: 'event', title: 'Standup', start: '09:30', end: '10:30', repeat: { freq: 'weekdays' } });
+    expect(parseQuick('Gym every mon wed fri 7-8am', REF)).toMatchObject({ kind: 'event', title: 'Gym', start: '07:00', end: '08:00', repeat: { freq: 'weekly', days: [1, 3, 5] } });
   });
 
   it('leaves ordinary words alone', () => {

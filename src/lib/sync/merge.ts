@@ -61,14 +61,16 @@ export function merge3(b: unknown, l: unknown, r: unknown, prefer?: 'local' | 'r
     return { value: out, conflicts };
   }
   if (prefer) return { value: prefer === 'local' ? l : r, conflicts: [] };
-  return { value: pick(l, r, newer), conflicts: [] };
+  return { value: pick(l, r, newer, path), conflicts: [] };
 }
 
 const isEmpty = (x: unknown) =>
   x === undefined || x === null || x === '' || x === false || (typeof x === 'string' && !x.trim()) || (Array.isArray(x) && !x.length) || (isObj(x) && Object.values(x).every(isEmpty));
 
 /** Settle one field both sides changed: something beats nothing, added-to text keeps the longer, else the newer change. */
-function pick(l: unknown, r: unknown, newer: 'local' | 'remote'): unknown {
+function pick(l: unknown, r: unknown, newer: 'local' | 'remote', path = ''): unknown {
+  // Routine steps ticked on two devices the same day: keep all of them.
+  if (/^log\./.test(path) && Array.isArray(l) && Array.isArray(r)) return [...new Set([...l, ...r])];
   if (isEmpty(l) !== isEmpty(r)) return isEmpty(l) ? r : l;
   if (typeof l === 'string' && typeof r === 'string') {
     if (r.includes(l.trim())) return r;
@@ -116,7 +118,13 @@ function mergeRecord(
         return [k, { ...(ri[k] ?? {}), ...(li[k] ?? {}), minutes }];
       }),
     );
-    return keep({ t: Math.max(l!.t, r!.t), data: { ...l!.data, minutes: add('minutes'), sessions: add('sessions'), ...(keys.size ? { items } : {}) } });
+    // …and so do minutes per hour of the day.
+    const lh = l!.data.hours ?? {};
+    const rh = r!.data.hours ?? {};
+    const bh = bd?.hours ?? {};
+    const hourKeys = new Set([...Object.keys(lh), ...Object.keys(rh)]);
+    const hours = Object.fromEntries([...hourKeys].map((k) => [k, (Number(lh[k]) || 0) + (Number(rh[k]) || 0) - (Number(bh[k]) || 0)]));
+    return keep({ t: Math.max(l!.t, r!.t), data: { ...l!.data, minutes: add('minutes'), sessions: add('sessions'), ...(keys.size ? { items } : {}), ...(hourKeys.size ? { hours } : {}) } });
   }
   if (choice === 'both' && c !== 'journal') {
     const copyId = uid();

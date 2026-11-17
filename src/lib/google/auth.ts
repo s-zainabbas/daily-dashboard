@@ -17,6 +17,8 @@ export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 /** Add and remove events, asked for only when you turn on phone reminders (see phoneReminders.ts). */
 export const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+/** Read-only Gmail, asked for only when you turn on "Starred in Gmail" (see gmail.ts). */
+export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const SCOPES = `${DRIVE_SCOPE} openid email profile`;
 const TOKEN_KEY = 'daily-dashboard:google-token';
 const GIS_SRC = 'https://accounts.google.com/gsi/client';

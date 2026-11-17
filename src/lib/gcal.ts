@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from 'react';
 import { addDays, diffDays, today } from './date';
-import { CALENDAR_SCOPE, currentToken, googleConfigured, requestToken, tokenHasScope } from './google/auth';
-import { CalendarError, listCalendars, listEvents, REMINDER_PREFIX, toShown, type GCalendar, type ShownEvent } from './google/calendar';
+import { CALENDAR_EVENTS_SCOPE, CALENDAR_SCOPE, currentToken, googleConfigured, requestToken, tokenHasScope } from './google/auth';
+import { CalendarError, createGoogleEvent, deleteGoogleEvent, listCalendars, listEvents, REMINDER_PREFIX, toShown, updateGoogleEvent, type EventInput, type GCalendar, type ShownEvent } from './google/calendar';
 import { useStore } from './store';
-import type { CalEvent, DateKey, JobApplication } from './types';
+import type { CalEvent, Countdown, DateKey, JobApplication } from './types';
+import { countdownDays } from './countdowns';
 import { interviewEvents } from './jobs';
+import { expandEvents } from './events';
 
 /**
  * Google Calendar on the dashboard: read-only, per device. Events are fetched from Google,
@@ -165,21 +167,71 @@ export function isChosen(v: GcalView, id: string) {
   return shownIds(v).has(id);
 }
 
+/* ---------- Adding and changing Google events ---------- */
+
+/** Calendars shown on the dashboard that you can add events to. */
+export function writableCalendars(v: GcalView = view): GCalendar[] {
+  if (!v.enabled) return [];
+  const ids = shownIds(v);
+  return v.calendars.filter((c) => c.writable && ids.has(c.id));
+}
+
+/** The sign-in covers changing calendar events (asked for once, the first time you save one). */
+export const canEditGoogle = () => tokenHasScope(CALENDAR_EVENTS_SCOPE);
+
+/**
+ * Ask Google for permission to change events, if it wasn't given yet. Call straight from a click
+ * or form submit: Google's window is opened before anything is awaited.
+ */
+export function allowGoogleEditing(loginHint?: string): Promise<void> {
+  if (canEditGoogle()) return Promise.resolve();
+  return requestToken('', loginHint, `${CALENDAR_SCOPE} ${CALENDAR_EVENTS_SCOPE}`).then(() => {
+    if (!canEditGoogle()) throw new Error('Permission to change calendar events wasn’t given. Try again and tick the box for editing events.');
+  });
+}
+
+function editToken(): string {
+  const token = currentToken();
+  if (!token || !canEditGoogle()) throw new Error('Google sign-in needs to be renewed. Try again.');
+  return token;
+}
+
+/** Add an event to a Google calendar, or change one (`eventId`). Then reloads the calendar. */
+export async function saveGoogleEvent(calendarId: string, input: EventInput, eventId?: string): Promise<void> {
+  const token = editToken();
+  if (eventId) await updateGoogleEvent(token, calendarId, eventId, input);
+  else await createGoogleEvent(token, calendarId, input);
+  await refreshCalendar(true);
+}
+
+export async function removeGoogleEvent(calendarId: string, eventId: string): Promise<void> {
+  await deleteGoogleEvent(editToken(), calendarId, eventId);
+  // Hide it straight away; the refresh confirms.
+  set({ events: view.events.filter((e) => e.google?.eventId !== eventId || e.google?.calendarId !== calendarId) });
+  await refreshCalendar(true);
+}
+
 /** Your own events plus the Google ones, for everything that shows events. */
 export function useAllEvents(): ShownEvent[] {
   const own = useStore((s) => s.events);
   const jobs = useStore((s) => s.jobs);
+  const countdowns = useStore((s) => s.countdowns);
   const g = useGcal();
-  return mergeEvents(own, g.enabled ? g.events : [], jobs);
+  return mergeEvents(own, g.enabled ? g.events : [], jobs, countdowns);
 }
 
-let memo: { own: CalEvent[]; google: ShownEvent[]; jobs?: JobApplication[]; out: ShownEvent[] } | undefined;
-/** Your events, then interviews from Jobs, then Google Calendar. */
-export function mergeEvents(own: CalEvent[], google: ShownEvent[], jobs?: JobApplication[]): ShownEvent[] {
-  if (memo && memo.own === own && memo.google === google && memo.jobs === jobs) return memo.out;
+let memo: { own: CalEvent[]; google: ShownEvent[]; jobs?: JobApplication[]; countdowns?: Countdown[]; day: string; out: ShownEvent[] } | undefined;
+/** Your events (repeats spread over their days), countdowns, interviews from Jobs, then Google Calendar. */
+export function mergeEvents(own: CalEvent[], google: ShownEvent[], jobs?: JobApplication[], countdowns?: Countdown[]): ShownEvent[] {
+  const day = today();
+  if (memo && memo.own === own && memo.google === google && memo.jobs === jobs && memo.countdowns === countdowns && memo.day === day) return memo.out;
   const interviews = jobs ? interviewEvents(jobs) : [];
-  const out = google.length || interviews.length ? [...own, ...interviews, ...google] : own;
-  memo = { own, google, jobs, out };
+  const dates: ShownEvent[] = countdowns?.length
+    ? countdownDays(countdowns, addDays(day, -120), addDays(day, 400)).map(({ c, date }) => ({ id: `cd:${c.id}:${date}`, title: `${c.emoji ? `${c.emoji} ` : ''}${c.title}`, date, countdownId: c.id }))
+    : [];
+  const mine = expandEvents(own);
+  const out = google.length || interviews.length || dates.length ? [...mine, ...dates, ...interviews, ...google] : mine;
+  memo = { own, google, jobs, countdowns, day, out };
   return out;
 }
 

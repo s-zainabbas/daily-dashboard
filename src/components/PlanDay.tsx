@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, CalendarCheck, Check, Play, Sparkles, Sunrise, Target, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarCheck, Check, Play, Sparkles, Sunrise, Target, X , Wand2 } from 'lucide-react';
 import { addDays, dueLabel, formatDuration, nowMinutes, today as todayKey } from '../lib/date';
 import { useAllEvents } from '../lib/gcal';
 import { useNow } from '../lib/hooks';
@@ -7,6 +7,7 @@ import { applyPlan, candidates, freeMinutes, overdue, planned, type Triage } fro
 import { actions, getState, setState, useStore } from '../lib/store';
 import { workActions } from '../lib/timer';
 import type { Task } from '../lib/types';
+import { openAutoPlan } from './AutoPlan';
 import { Dialog, DialogHead, toast } from './ui';
 
 type Step = 'catchup' | 'pick' | 'priority' | 'done';
@@ -271,6 +272,18 @@ function PlanFlow({ onClose }: { onClose: () => void }) {
               <button type="button" className="btn ghost" onClick={onClose}>
                 Close
               </button>
+              {summary.count > 0 && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    onClose();
+                    setTimeout(openAutoPlan, 50);
+                  }}
+                >
+                  <Wand2 size={14} /> Block time for them
+                </button>
+              )}
               {summary.title && (
                 <button
                   type="button"

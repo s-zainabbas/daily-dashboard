@@ -3,6 +3,7 @@ import { toast } from '../../components/ui';
 import { AuthError, clearToken, currentToken, fetchAccount, googleConfigured, loadGis, requestToken, revokeAccess, tokenExpiresAt } from '../google/auth';
 import { drive } from '../google/drive';
 import { disconnectCalendar, refreshCalendar } from '../gcal';
+import { disconnectGmail, refreshGmail } from '../gmail';
 import { applyRemote, getState, onLocalChange, replaceState, rollover, setState } from '../store';
 import { SyncEngine, type FirstChoice, type SyncView } from './engine';
 import { deviceName, localMeta } from './local';
@@ -81,10 +82,12 @@ export function connectGoogle(mode: 'connect' | 'switch' | 'reconnect' = 'connec
       if (before && before.sub !== account.sub) {
         toast(`Switched to ${account.email}.`);
         disconnectCalendar(); // the calendar belonged to the other account
+        disconnectGmail();
       }
       return engine.connected(account);
     })
     .then(() => refreshCalendar(true))
+    .then(() => refreshGmail(true))
     .catch(authFailed);
 }
 
@@ -99,6 +102,7 @@ export async function disconnectGoogle() {
   if (!engine) return;
   engine.disconnect();
   disconnectCalendar();
+  disconnectGmail();
   await revokeAccess();
   toast('Disconnected. Your data is still on this device and in your Google Drive.');
 }
@@ -165,6 +169,7 @@ function armRenewal() {
     renewal = requestToken('', account!.email)
       .then(() => engine!.resumed())
       .then(() => refreshCalendar(true))
+      .then(() => refreshGmail(true))
       .catch(() => {
         // Don't re-ask in a loop if Google said no; the Sync button still works any time.
         quietUntil = Date.now() + 10 * 60_000;

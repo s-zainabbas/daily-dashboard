@@ -1,11 +1,12 @@
-import { forwardRef, useMemo, useState } from 'react';
-import { Bell, CalendarClock, CheckCircle2, Clock, CornerDownLeft, Flag, Plus, Repeat as RepeatIcon } from 'lucide-react';
+import { forwardRef, useMemo, useRef, useState } from 'react';
+import { Mic, Bell, CalendarClock, CheckCircle2, Clock, CornerDownLeft, Flag, Plus, Repeat as RepeatIcon } from 'lucide-react';
 import { dueLabel, dueLabelInline, formatDuration, formatTime } from '../lib/date';
 import { parseQuick } from '../lib/parse';
 import { repeatLabel } from '../lib/repeat';
 import { actions, useStore } from '../lib/store';
 import { toast } from './ui';
 import { askForNotifications } from '../lib/useReminders';
+import { listen, speechSupported } from '../lib/speech';
 
 const EXAMPLES = ['Call Sam tomorrow !high', 'Standup at 9:30 for 15m', 'Dentist fri 3-4pm', 'Send invoice nov 14', 'Gym every mon wed fri', 'Pay rent monthly'];
 
@@ -15,12 +16,30 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
   const use24h = useStore((s) => s.settings.use24h);
   const p = useMemo(() => parseQuick(text), [text]);
   const ready = p.title.length > 0;
+  const [listening, setListening] = useState(false);
+  const stopRef = useRef<(() => void) | null>(null);
+  const [canSpeak] = useState(speechSupported);
+
+  function voice() {
+    if (listening) return stopRef.current?.();
+    setListening(true);
+    stopRef.current = listen(
+      (words) => setText(words),
+      (error) => {
+        setListening(false);
+        stopRef.current = null;
+        if (error === 'not-allowed' || error === 'service-not-allowed') toast('Microphone access is blocked for this site. Allow it in your browser’s site settings.', undefined, 7000);
+        else if (error && error !== 'no-speech' && error !== 'aborted') toast('Couldn’t hear that. Try again?');
+        (ref && typeof ref === 'object' ? ref.current : null)?.focus();
+      },
+    );
+  }
 
   function submit() {
     if (!ready) return;
     if (p.kind === 'event') {
-      actions.addEvent({ title: p.title, date: p.date!, start: p.start, end: p.end });
-      toast(`Event added · ${dueLabel(p.date!)} ${formatTime(p.start!, use24h)}`);
+      actions.addEvent({ title: p.title, date: p.date!, start: p.start, end: p.end, repeat: p.repeat });
+      toast(p.repeat ? `Repeating event added · ${repeatLabel(p.repeat)} at ${formatTime(p.start!, use24h)}` : `Event added · ${dueLabel(p.date!)} ${formatTime(p.start!, use24h)}`);
     } else {
       actions.addTask({ title: p.title, dueDate: p.date, priority: p.priority ?? 'med', repeat: p.repeat, estimate: p.estimate, remindAt: p.remindAt });
       if (p.remindAt) askForNotifications();
@@ -41,7 +60,7 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
           ref={ref}
           value={text}
           autoComplete="off"
-          placeholder={`Add a task or event — try “${example}”`}
+          placeholder={listening ? 'Listening…' : `Add a task or event — try “${example}”`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') submit();
@@ -54,6 +73,11 @@ export const QuickAdd = forwardRef<HTMLInputElement>(function QuickAdd(_, ref) {
         <span className="kbd-hint">
           <kbd>/</kbd>
         </span>
+        {canSpeak && (
+          <button type="button" className={`icon-btn mic ${listening ? 'on' : ''}`} onClick={voice} aria-label={listening ? 'Stop listening' : 'Say it'} aria-pressed={listening} title={listening ? 'Listening… tap to stop' : 'Say it — e.g. “Call Sam tomorrow at 3”'}>
+            <Mic size={16} />
+          </button>
+        )}
         <button className="btn primary" onClick={submit} disabled={!ready}>
           Add <CornerDownLeft size={14} />
         </button>

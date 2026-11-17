@@ -63,6 +63,18 @@
       ]
     },
     {
+      "name": "Focus mode",
+      "short_name": "Focus",
+      "url": "./?action=focus-mode#today",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
       "name": "Shut down for the day",
       "short_name": "Shut down",
       "url": "./?action=shutdown#today",
@@ -74,5 +86,14 @@
         }
       ]
     }
-  ]
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": {
+      "title": "share-title",
+      "text": "share-text",
+      "url": "share-url"
+    }
+  }
 }

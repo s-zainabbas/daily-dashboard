@@ -36,6 +36,24 @@ export function demoState(name = 'Zain'): State {
     { id: uid(), title: base >= 18 * 60 ? 'Read & wind down' : 'Gym', date: t, start: at(base >= 18 * 60 ? 165 : 240), end: at(base >= 18 * 60 ? 210 : 300) },
     { id: uid(), title: 'Sprint planning', date: addDays(t, 1), start: '10:00', end: '11:00' },
     { id: uid(), title: 'Lunch with Alex', date: addDays(t, 1), start: '12:30', end: '13:30' },
+    { id: uid(), title: 'Morning run', date: addDays(t, -14), start: '07:00', end: '07:45', repeat: { freq: 'weekly', days: [1, 3, 5] } },
+  ];
+  const birthday = new Date(addDays(t, 5) + 'T12:00');
+  birthday.setFullYear(birthday.getFullYear() - 60);
+  s.countdowns = [
+    { id: uid(), title: 'Mum’s birthday', date: dateKey(birthday), yearly: true, emoji: '🎂', createdAt: now },
+    { id: uid(), title: 'Trip to Lisbon', date: addDays(t, 24), emoji: '✈️', createdAt: now },
+    { id: uid(), title: 'Portfolio launch', date: addDays(t, 9), emoji: '🚀', createdAt: now },
+  ];
+  const steps = [
+    { id: 'demo-s1', title: 'Drink a glass of water', minutes: 1 },
+    { id: 'demo-s2', title: 'Stretch', minutes: 5 },
+    { id: 'demo-s3', title: 'Make the bed', minutes: 2 },
+    { id: 'demo-s4', title: 'Review today’s plan', minutes: 5 },
+  ];
+  s.routines = [
+    { id: uid(), name: 'Morning routine', steps, log: { [t]: ['demo-s1', 'demo-s2'] }, createdAt: now },
+    { id: uid(), name: 'Evening wind-down', steps: [{ id: 'demo-e1', title: 'Tidy your desk', minutes: 5 }, { id: 'demo-e2', title: 'Plan tomorrow', minutes: 5 }, { id: 'demo-e3', title: 'Read', minutes: 20 }], createdAt: now },
   ];
   s.projects = [
     { id: uid(), name: 'Onboarding redesign', status: 'track', nextAction: 'Ship to staging and run 5 user tests', details: '', progress: 72 },
@@ -102,6 +120,11 @@ export function demoState(name = 'Zain'): State {
     const minutes = weekend ? (seed % 3) * 25 : 25 * (1 + (seed % 5));
     if (i > 6) s.focus[d] = { minutes, sessions: minutes / 25 };
     const f = s.focus[d];
+    // Mostly mid-morning, some early afternoon: shows up as the best focus hours in Insights.
+    if (f && f.minutes) {
+      const am = Math.round(f.minutes * 0.65);
+      f.hours = { 9: Math.round(am / 2), 10: am - Math.round(am / 2), [14 + (seed % 3)]: f.minutes - am };
+    }
     if (f && f.minutes && projectIds.length) {
       const pid = projectIds[seed % projectIds.length];
       const project = s.projects.find((p) => p.id === pid)!;

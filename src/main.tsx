@@ -11,6 +11,7 @@ import { demoMode, reloadFromStorage, replaceState, STORAGE_KEY } from './lib/st
 import { initDriveSync } from './lib/sync/driveSync';
 import { BACKUP_KEY, BASE_KEY } from './lib/sync/local';
 import { initCalendar } from './lib/gcal';
+import { initGmail } from './lib/gmail';
 import { initPhoneReminders } from './lib/phoneReminders';
 
 async function boot() {
@@ -25,6 +26,7 @@ async function boot() {
 
   initDriveSync();
   initCalendar();
+  initGmail();
   initPhoneReminders();
 
   createRoot(document.getElementById('root')!).render(

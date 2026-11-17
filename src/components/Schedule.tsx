@@ -1,14 +1,18 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, MapPin, RefreshCw, StickyNote, Trash2 } from 'lucide-react';
+import { Wand2, CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, MapPin, RefreshCw, StickyNote } from 'lucide-react';
 import { addDays, dateKey, formatDuration, formatTime, fromKey, fromMinutes, nowMinutes, toMinutes, today } from '../lib/date';
 import { useNow } from '../lib/hooks';
-import { actions, getState, useStore } from '../lib/store';
+import { getState, useStore } from '../lib/store';
 import { connectCalendar, refreshCalendar, useAllEvents, useGcal } from '../lib/gcal';
 import type { ShownEvent } from '../lib/google/calendar';
 import { useDriveSync } from '../lib/sync/driveSync';
 import type { CalEvent } from '../lib/types';
-import { Card, Dialog, DialogHead, Empty, toast } from './ui';
-import { MiniMonth, UpcomingDays } from './Calendar';
+import { Card, Empty } from './ui';
+import { MiniMonth, openShownEvent, UpcomingDays } from './Calendar';
+import { EventEditor } from './EventEditor';
+import { openAutoPlan } from './AutoPlan';
+import { workload } from '../lib/autoplan';
+import { freeMinutes } from '../lib/plan';
 
 const endOf = (e: CalEvent) => (e.end ? toMinutes(e.end) : toMinutes(e.start!) + 30);
 
@@ -31,7 +35,7 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
   const account = useDriveSync().account;
   const use24h = useStore((s) => s.settings.use24h);
   const [day, setDay] = useState(today);
-  const [editing, setEditing] = useState<CalEvent | 'new' | null>(null);
+  const [editing, setEditing] = useState<ShownEvent | 'new' | null>(null);
   // Search can open one of your events: jump to its day and open it.
   useEffect(() => {
     const on = (e: Event) => {
@@ -51,16 +55,7 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
     onRequestHandled?.();
   }, [editRequest, onRequestHandled]);
 
-  /** Your events open the editor; Google ones open in Google Calendar (they're read-only here). */
-  const open = (e: ShownEvent) => {
-    if (e.jobId) {
-      location.hash = 'jobs';
-      setTimeout(() => window.dispatchEvent(new CustomEvent('dd:open-job', { detail: e.jobId })), 80);
-      return;
-    }
-    if (!e.google) return setEditing(e);
-    if (e.google.link) window.open(e.google.link, '_blank', 'noopener');
-  };
+  const open = (e: ShownEvent) => openShownEvent(e, setEditing);
 
   const t = dateKey(now);
   const isToday = day === t;
@@ -80,6 +75,10 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
   const rangeEnd = Math.max(20 * 60, ...timed.map((e) => Math.ceil(endOf(e) / 60) * 60));
   const pct = (v: number) => `${((Math.min(Math.max(v, rangeStart), rangeEnd) - rangeStart) / (rangeEnd - rangeStart)) * 100}%`;
   const remaining = timed.filter((e) => endOf(e) > m).length;
+
+  const tasks = useStore((s) => s.tasks);
+  const planned = isToday ? workload(tasks, events, t) : 0;
+  const free = isToday ? freeMinutes(events, t, nowMinutes(now)) : 0;
 
   const dayTitle = isToday ? 'Today' : day === addDays(t, 1) ? 'Tomorrow' : day === addDays(t, -1) ? 'Yesterday' : fromKey(day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
@@ -116,6 +115,11 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
           <button className="icon-btn sm" onClick={() => setDay(addDays(day, 1))} aria-label="Next day">
             <ChevronRight size={16} />
           </button>
+          {isToday && (
+            <button className="icon-btn sm" onClick={openAutoPlan} aria-label="Auto-plan today" title="Auto-plan: fit today’s tasks around your events">
+              <Wand2 size={15} />
+            </button>
+          )}
           <button className="icon-btn sm" onClick={() => setEditing('new')} aria-label="New event" title="New event">
             <CalendarPlus size={15} />
           </button>
@@ -144,6 +148,16 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
         {fromKey(day).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
         {!isToday && <small>{dayTitle}</small>}
       </div>
+      {isToday && planned > 0 && free >= 0 && planned > free && (
+        <div className="overplan" role="status">
+          <span>
+            <b>{formatDuration(planned)}</b> of tasks today, but only <b>{formatDuration(free)}</b> free{free ? '' : ' left'}. Move something to tomorrow?
+          </span>
+          <button className="btn sm ghost" onClick={() => window.dispatchEvent(new CustomEvent('dd:plan-day'))}>
+            Plan my day
+          </button>
+        </div>
+      )}
       <div className="daybar" aria-hidden>
         <div className="daybar-track">
           {isToday && <div className="daybar-past" style={{ width: pct(m) }} />}
@@ -171,7 +185,7 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
       ) : (
         <div className="agenda" ref={agendaRef}>
           {allDay.map((e) => (
-            <button key={e.id} className="ev" onClick={() => open(e)} title={e.google ? `${e.google.calendar} · opens in Google Calendar` : undefined}>
+            <button key={e.id} className="ev" onClick={() => open(e)} title={e.google ? e.google.calendar : undefined}>
               <div className="ev-time">All day</div>
               <div className="ev-body" style={evColor(e)}>
                 <div className="ev-title">{e.title}</div>
@@ -200,7 +214,7 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
               <Fragment key={e.id}>
                 {gap >= 30 && !past && !showNow && <div className="gap-row">{formatDuration(gap)} free</div>}
                 {showNow && <div className="now-line num">Now · {fmt(fromMinutes(m))}</div>}
-                <button className={`ev ${past ? 'past' : ''} ${live ? 'now' : ''}`} onClick={() => open(e)} title={e.google ? `${e.google.calendar} · opens in Google Calendar` : undefined}>
+                <button className={`ev ${past ? 'past' : ''} ${live ? 'now' : ''}`} onClick={() => open(e)} title={e.google ? e.google.calendar : undefined}>
                   <div className="ev-time num">
                     {fmt(e.start!)}
                     {e.end && <small>{fmt(e.end)}</small>}
@@ -239,93 +253,3 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
   );
 }
 
-export function EventEditor({ event, defaultDate, defaultStart, onClose }: { event: CalEvent | 'new' | null; defaultDate: string; defaultStart?: string; onClose: () => void }) {
-  const init = event && event !== 'new' ? event : undefined;
-  const [form, setForm] = useState({ title: '', date: '', start: '', end: '', location: '', notes: '' });
-  const [forEvent, setForEvent] = useState<unknown>(null);
-  if (event !== forEvent) {
-    setForEvent(event);
-    const next = defaultStart ? toMinutes(defaultStart) : Math.ceil(nowMinutes() / 30) * 30;
-    setForm({
-      title: init?.title ?? '',
-      date: init?.date ?? defaultDate,
-      start: init ? init.start ?? '' : fromMinutes(Math.min(next, 22 * 60)),
-      end: init ? init.end ?? '' : fromMinutes(Math.min(next + 60, 23 * 60)),
-      location: init?.location ?? '',
-      notes: init?.notes ?? '',
-    });
-  }
-  const set = (p: Partial<typeof form>) => setForm((f) => ({ ...f, ...p }));
-  const invalid = form.start && form.end && form.end <= form.start;
-
-  function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.title.trim() || invalid) return;
-    const data = {
-      title: form.title.trim(),
-      date: form.date || today(),
-      start: form.start || undefined,
-      end: form.start ? form.end || undefined : undefined,
-      location: form.location.trim() || undefined,
-      notes: form.notes.trim() || undefined,
-    };
-    if (init) actions.updateEvent(init.id, data);
-    else actions.addEvent(data);
-    onClose();
-  }
-
-  return (
-    <Dialog open={!!event} onClose={onClose} label={init ? 'Edit event' : 'New event'}>
-      <DialogHead title={init ? 'Edit event' : 'New event'} onClose={onClose} />
-      <form className="modal-body" onSubmit={save}>
-        <label className="field">
-          <span>Title</span>
-          <input className="input" autoFocus data-autofocus required value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="What’s happening?" />
-        </label>
-        <div className="row">
-          <label className="field">
-            <span>Date</span>
-            <input className="input" type="date" required value={form.date} onChange={(e) => set({ date: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>Starts</span>
-            <input className="input" type="time" value={form.start} onChange={(e) => set({ start: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>Ends</span>
-            <input className="input" type="time" value={form.end} disabled={!form.start} onChange={(e) => set({ end: e.target.value })} />
-          </label>
-        </div>
-        {invalid ? <small style={{ color: 'var(--bad)', marginTop: -6 }}>End time needs to be after the start.</small> : <small style={{ color: 'var(--muted)', marginTop: -6 }}>Leave the start empty for an all-day event.</small>}
-        <label className="field">
-          <span>Location</span>
-          <input className="input" value={form.location} onChange={(e) => set({ location: e.target.value })} placeholder="Room, address or link" />
-        </label>
-        <label className="field">
-          <span>Notes</span>
-          <input className="input" value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="Agenda, prep…" />
-        </label>
-        <div className="modal-foot">
-          {init && (
-            <button
-              type="button"
-              className="btn ghost danger"
-              onClick={() => {
-                const undo = actions.removeEvent(init.id);
-                toast('Event deleted', { label: 'Undo', run: undo });
-                onClose();
-              }}
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-          )}
-          <span className="spacer" />
-          <button type="button" className="btn ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn primary">{init ? 'Save' : 'Add event'}</button>
-        </div>
-      </form>
-    </Dialog>
-  );
-}

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { BarChart3, BriefcaseBusiness, CheckCircle2, Flame, Repeat, Smile, Timer } from 'lucide-react';
-import { formatDuration, lastDays, today as todayKey } from '../lib/date';
+import { BarChart3, Sun, BriefcaseBusiness, CheckCircle2, Flame, Repeat, Smile, Timer } from 'lucide-react';
+import { formatDuration, formatTime, fromMinutes, lastDays, today as todayKey } from '../lib/date';
 import { habitStreak } from '../lib/habits';
-import { focusBreakdown, focusSeries, habitRates, headline, jobsPerWeek, moodSeries, tasksSeries } from '../lib/insights';
+import { focusBreakdown, focusHours, focusSeries, habitRates, headline, jobsPerWeek, moodSeries, tasksSeries } from '../lib/insights';
 import { useStore } from '../lib/store';
 import { BarChart, HBars, MoodChart } from './Charts';
 import { JOB_STATUS } from './Jobs';
@@ -104,6 +104,7 @@ export function Insights() {
           />
           {breakdown.untracked > 0 && <p className="chart-note">Plus {formatDuration(breakdown.untracked)} not linked to a task.</p>}
         </Card>
+        <FocusHoursCard days={range} />
         <Card title="Mood" icon={<Smile size={16} />} meta="From your evening reviews">
           {moodSeries(s, days, t).some((m) => m.value) ? (
             <MoodChart data={moodSeries(s, days, t)} faces={faces} />
@@ -155,5 +156,49 @@ function Tile({ icon, label, value, sub }: { icon: React.ReactNode; label: strin
         <div className="sub">{sub}</div>
       </div>
     </div>
+  );
+}
+
+/** When in the day your focus time happens, from the timer's start times. */
+function FocusHoursCard({ days }: { days: number }) {
+  const s = useStore((x) => x);
+  const use24h = s.settings.use24h;
+  const { byHour, best, total } = focusHours(s, todayKey(), Math.max(days, 30));
+  const from = 6;
+  const to = 23;
+  const hours = byHour.slice(from, to);
+  const max = Math.max(1, ...hours);
+  const label = (h: number) => formatTime(fromMinutes(h * 60), use24h);
+  return (
+    <Card title="When you focus best" icon={<Sun size={16} />} meta={best ? `${label(best[0])}–${label(best[1])}` : undefined}>
+      {total === 0 ? (
+        <p className="chart-empty">Use “Start working” in the Now card. Once you have a couple of hours logged, this shows the time of day you get the most done — and auto-planning puts important tasks there.</p>
+      ) : (
+        <>
+          <div className="hours-chart" role="img" aria-label={best ? `Most focus between ${label(best[0])} and ${label(best[1])}` : 'Focus by hour of day'}>
+            {hours.map((v, i) => {
+              const h = from + i;
+              const inBest = best && h >= best[0] && h < best[1];
+              return (
+                <span key={h} className={inBest ? 'best' : ''} title={`${label(h)}: ${formatDuration(v)}`}>
+                  <i style={{ height: `${Math.max(v ? 6 : 2, (v / max) * 100)}%` }} />
+                </span>
+              );
+            })}
+          </div>
+          <div className="chart-x hours-x">
+            <span>{label(from)}</span>
+            <span>{label(12)}</span>
+            <span>{label(18)}</span>
+            <span>{label(to - 1)}</span>
+          </div>
+          <p className="chart-note">
+            {best
+              ? `Over the last ${Math.max(days, 30)} days you focused most between ${label(best[0])} and ${label(best[1])}. Auto-plan puts your high-priority tasks there when it can.`
+              : `${formatDuration(total)} logged so far — a bit more and your best hours show up here.`}
+          </p>
+        </>
+      )}
+    </Card>
   );
 }

@@ -3,7 +3,7 @@ import { dateKey, today } from './date';
 import { nextDue } from './repeat';
 import { bump } from './habits';
 import { kvGet, kvSet, onKvChange } from './kv';
-import type { CalEvent, DayLog, Habit, JobApplication, NotePage, Project, QuickLink, SavingsGoal, Settings, State, Task, Transaction } from './types';
+import type { CalEvent, Countdown, DayLog, Habit, JobApplication, NotePage, Project, QuickLink, Routine, SavingsGoal, Settings, State, Task, Transaction } from './types';
 
 export const STORAGE_KEY = 'daily-dashboard:v2';
 const LEGACY_PREFIX = 'dashboard.';
@@ -49,6 +49,8 @@ export function emptyState(): State {
     transactions: [],
     budgets: [],
     savingsGoals: [],
+    countdowns: [],
+    routines: [],
     money: { currency: defaultCurrency() },
     notes: '',
     pages: [],
@@ -146,6 +148,8 @@ export function normalize(raw: any): State {
     transactions: Array.isArray(raw.transactions) ? raw.transactions : [],
     budgets: Array.isArray(raw.budgets) ? raw.budgets : [],
     savingsGoals: Array.isArray(raw.savingsGoals) ? raw.savingsGoals : [],
+    countdowns: Array.isArray(raw.countdowns) ? raw.countdowns : [],
+    routines: Array.isArray(raw.routines) ? raw.routines : [],
     money: { ...base.money, ...(raw.money && typeof raw.money === 'object' ? raw.money : {}) },
     journal: Array.isArray(raw.journal) ? raw.journal : [],
     focus: raw.focus && typeof raw.focus === 'object' ? raw.focus : {},
@@ -200,6 +204,22 @@ export function rollover(s: State, now = new Date()): State {
         : s.priority,
     reflection: { shipped: '', slipped: '', carries: '' },
   };
+}
+
+/** Spread `minutes` starting at `startedAt` over the hours of the day they fall in. */
+export function addHours(hours: Record<string, number>, startedAt: number, minutes: number): Record<string, number> {
+  const parts: Record<string, number> = {};
+  let at = startedAt;
+  let left = minutes;
+  while (left > 0.001) {
+    const d = new Date(at);
+    const n = Math.min(left, 60 - d.getMinutes() - d.getSeconds() / 60);
+    parts[d.getHours()] = (parts[d.getHours()] ?? 0) + n;
+    left -= n;
+    at += n * 60_000;
+  }
+  for (const [h, n] of Object.entries(parts)) if (Math.round(n)) hours[h] = (hours[h] ?? 0) + Math.round(n);
+  return hours;
 }
 
 /** Google Drive sync settings for this device (see sync/local.ts). */
@@ -595,8 +615,8 @@ export const actions = {
   toggleWeekGoal(id: string) {
     setState((s) => (s.week ? { ...s, week: { ...s.week, goals: s.week.goals.map((g) => (g.id === id ? { ...g, done: !g.done } : g)) } } : s));
   },
-  /** Log a finished focus session, credited to the task (or the #1 priority) it was for. */
-  logFocus(minutes: number, taskId?: string) {
+  /** Log a finished focus session, credited to the task (or the #1 priority) it was for, and to the hours it ran in. */
+  logFocus(minutes: number, taskId?: string, startedAt?: number) {
     const d = today();
     const s = getState();
     const task = taskId && taskId !== 'priority' ? s.tasks.find((t) => t.id === taskId) : undefined;
@@ -608,9 +628,43 @@ export const actions = {
         const prev = items[taskId];
         items[taskId] = { title, minutes: (prev?.minutes ?? 0) + minutes, ...(task?.projectId ? { projectId: task.projectId } : {}) };
       }
-      return { ...f, [d]: { minutes: day.minutes + minutes, sessions: day.sessions + 1, ...(Object.keys(items).length ? { items } : {}) } };
+      const hours = startedAt ? addHours({ ...day.hours }, startedAt, minutes) : day.hours;
+      return { ...f, [d]: { minutes: day.minutes + minutes, sessions: day.sessions + 1, ...(Object.keys(items).length ? { items } : {}), ...(hours && Object.keys(hours).length ? { hours } : {}) } };
     });
   },
+  saveCountdown(c: Omit<Countdown, 'id' | 'createdAt'> & { id?: string }) {
+    patch('countdowns', (cs) => (c.id ? cs.map((x) => (x.id === c.id ? { ...x, ...c, id: x.id } : x)) : [...cs, { ...c, id: uid(), createdAt: Date.now() }]));
+  },
+  removeCountdown(id: string) {
+    const c = getState().countdowns.find((x) => x.id === id);
+    patch('countdowns', (cs) => cs.filter((x) => x.id !== id));
+    return () => c && patch('countdowns', (cs) => [...cs, c]);
+  },
+
+  saveRoutine(r: Omit<Routine, 'id' | 'createdAt'> & { id?: string }): string {
+    const id = r.id ?? uid();
+    patch('routines', (rs) => (r.id ? rs.map((x) => (x.id === r.id ? { ...x, ...r, id: x.id } : x)) : [...rs, { ...r, id, createdAt: Date.now() }]));
+    return id;
+  },
+  removeRoutine(id: string) {
+    const r = getState().routines.find((x) => x.id === id);
+    patch('routines', (rs) => rs.filter((x) => x.id !== id));
+    return () => r && patch('routines', (rs) => [...rs, r]);
+  },
+  /** Tick a routine step done (or not) for a day. Logs older than five weeks are dropped. */
+  setRoutineStep(id: string, stepId: string, done: boolean, date = today()) {
+    const cutoff = dateKey(new Date(Date.now() - 35 * 864e5));
+    patch('routines', (rs) =>
+      rs.map((r) => {
+        if (r.id !== id) return r;
+        const day = new Set(r.log?.[date] ?? []);
+        done ? day.add(stepId) : day.delete(stepId);
+        const log = Object.fromEntries(Object.entries({ ...r.log, [date]: [...day] }).filter(([d, ids]) => d >= cutoff && ids.length));
+        return { ...r, log };
+      }),
+    );
+  },
+
   setSettings(p: Partial<Settings>) {
     patch('settings', (v) => ({ ...v, ...p }));
   },

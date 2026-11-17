@@ -13,6 +13,23 @@ export interface DayPoint {
 export const focusSeries = (s: State, days: DateKey[]): DayPoint[] => days.map((date) => ({ date, value: s.focus[date]?.minutes ?? 0 }));
 
 /** Tasks completed per day: from the journal for past days, and live for today. */
+/**
+ * When you focus best: minutes per hour of the day over the last `days`, and the two-hour
+ * stretch with the most. Null until there's enough history (two hours with known times).
+ */
+export function focusHours(s: State, today: DateKey, days = 30): { byHour: number[]; best: [number, number] | null; total: number } {
+  const byHour = Array.from({ length: 24 }, () => 0);
+  for (let i = 0; i < days; i++) {
+    const h = s.focus[addDays(today, -i)]?.hours;
+    if (h) for (const [k, v] of Object.entries(h)) byHour[Number(k)] += Number(v) || 0;
+  }
+  const total = byHour.reduce((a, b) => a + b, 0);
+  if (total < 120) return { byHour, best: null, total };
+  let best = 0;
+  for (let h = 1; h < 23; h++) if (byHour[h] + byHour[h + 1] > byHour[best] + byHour[best + 1]) best = h;
+  return { byHour, best: [best, best + 2], total };
+}
+
 export function tasksSeries(s: State, days: DateKey[], today: DateKey): DayPoint[] {
   const journal = new Map(s.journal.map((j) => [j.date, j.tasksDone]));
   const live = new Map<string, number>();

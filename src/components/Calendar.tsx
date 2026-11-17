@@ -4,11 +4,11 @@ import { addDays, dateKey, formatDuration, formatTime, fromKey, toMinutes, today
 import { ensureCalendarRange, useAllEvents, useGcal } from '../lib/gcal';
 import type { ShownEvent } from '../lib/google/calendar';
 import { useNow } from '../lib/hooks';
-import { getState, useStore } from '../lib/store';
-import type { CalEvent, DateKey } from '../lib/types';
+import { actions, getState, useStore } from '../lib/store';
+import type { DateKey } from '../lib/types';
 import { mondayOf } from '../lib/week';
-import { EventEditor } from './Schedule';
-import { Card } from './ui';
+import { EventEditor } from './EventEditor';
+import { Card, toast } from './ui';
 
 /* ---------- Shared helpers ---------- */
 
@@ -44,17 +44,17 @@ export function byDay(events: ShownEvent[], from: DateKey, to: DateKey) {
   return map;
 }
 
-/** Your events open the editor; Google ones open in Google Calendar; interviews open in Jobs. */
-export function openShownEvent(e: ShownEvent, edit: (e: CalEvent) => void) {
+/** Interviews open in Jobs, countdowns in their editor; everything else (yours or Google's) in the event editor. */
+export function openShownEvent(e: ShownEvent, edit: (e: ShownEvent) => void) {
   if (e.jobId) {
     location.hash = 'jobs';
     setTimeout(() => window.dispatchEvent(new CustomEvent('dd:open-job', { detail: e.jobId })), 80);
-  } else if (e.google) {
-    if (e.google.link) window.open(e.google.link, '_blank', 'noopener');
+  } else if (e.countdownId) {
+    window.dispatchEvent(new CustomEvent('dd:open-countdown', { detail: e.countdownId }));
   } else edit(e);
 }
 
-const evColor = (e: ShownEvent) => e.google?.color ?? (e.jobId ? 'var(--warn)' : 'var(--accent)');
+const evColor = (e: ShownEvent) => e.google?.color ?? (e.jobId ? 'var(--warn)' : e.countdownId ? 'var(--ok)' : 'var(--accent)');
 
 /** Load Google events for the days on screen. */
 function useLoadRange(from: DateKey, to: DateKey) {
@@ -179,8 +179,23 @@ export function MonthView() {
   const gcal = useGcal();
   const [month, setMonth] = useState(() => firstOfMonth(todayKey()));
   const [selected, setSelected] = useState(() => todayKey());
-  const [editing, setEditing] = useState<CalEvent | 'new' | null>(null);
+  const [editing, setEditing] = useState<ShownEvent | 'new' | null>(null);
   const [newDate, setNewDate] = useState(selected);
+  const own = useStore((s) => s.events);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropOn, setDropOn] = useState<DateKey | null>(null);
+  // Only your own one-off events move by dragging (repeats, Google and interviews open instead).
+  const movable = (e: ShownEvent) => !e.google && !e.jobId && !e.seriesId && !e.countdownId && own.some((x) => x.id === e.id);
+  const moveTo = (d: DateKey) => {
+    const ev = own.find((x) => x.id === dragId);
+    setDragId(null);
+    setDropOn(null);
+    if (!ev || ev.date === d) return;
+    const from = ev.date;
+    actions.updateEvent(ev.id, { date: d });
+    pick(d);
+    toast(`Moved “${ev.title}” to ${fromKey(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`, { label: 'Undo', run: () => actions.updateEvent(ev.id, { date: from }) });
+  };
 
   const days = useMemo(() => monthGrid(month), [month]);
   const map = useMemo(() => byDay(events, days[0], days[days.length - 1]), [events, days]);
@@ -261,7 +276,17 @@ export function MonthView() {
                   key={d}
                   role="button"
                   tabIndex={0}
-                  className={`mon-day ${out ? 'out' : ''} ${d === t ? 'today' : ''} ${d === selected ? 'sel' : ''} ${d < t ? 'past' : ''}`}
+                  className={`mon-day ${out ? 'out' : ''} ${d === t ? 'today' : ''} ${d === selected ? 'sel' : ''} ${d < t ? 'past' : ''} ${dropOn === d ? 'drop' : ''}`}
+                  onDragOver={(e) => {
+                    if (!dragId) return;
+                    e.preventDefault();
+                    if (dropOn !== d) setDropOn(d);
+                  }}
+                  onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropOn((x) => (x === d ? null : x))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    moveTo(d);
+                  }}
                   onClick={() => pick(d)}
                   onDoubleClick={(e) => !(e.target as HTMLElement).closest('.mon-ev') && addOn(d)}
                   onKeyDown={(e) => {
@@ -288,7 +313,17 @@ export function MonthView() {
                     {list.slice(0, MAX_CHIPS).map((e) => (
                       <button
                         key={e.id}
-                        className={`mon-ev ${e.start ? 'timed' : 'allday'}`}
+                        className={`mon-ev ${e.start ? 'timed' : 'allday'} ${dragId === e.id ? 'dragging' : ''}`}
+                        draggable={movable(e)}
+                        onDragStart={(ev) => {
+                          ev.dataTransfer.effectAllowed = 'move';
+                          ev.dataTransfer.setData('text/plain', e.title);
+                          setDragId(e.id);
+                        }}
+                        onDragEnd={() => {
+                          setDragId(null);
+                          setDropOn(null);
+                        }}
                         style={{ ['--ev' as string]: evColor(e) }}
                         title={`${e.title}${e.start ? ` · ${fmt(e.start)}${e.end ? `–${fmt(e.end)}` : ''}` : ' · all day'}${e.google ? ` · ${e.google.calendar}` : ''}`}
                         onClick={(ev) => {
@@ -313,7 +348,7 @@ export function MonthView() {
             })}
           </div>
         </div>
-        <p className="wk-help">Click a day to see everything on it. Double-click a day to add an event. Google events open in Google Calendar.</p>
+        <p className="wk-help">Click a day to see everything on it. Double-click a day to add an event, or drag your events to another day.</p>
       </Card>
 
       <Card

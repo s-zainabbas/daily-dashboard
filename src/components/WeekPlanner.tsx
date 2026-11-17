@@ -7,8 +7,8 @@ import { useNow } from '../lib/hooks';
 import { actions, getState, useStore } from '../lib/store';
 import type { CalEvent, Task } from '../lib/types';
 import { mondayOf } from '../lib/week';
-import { EventEditor } from './Schedule';
-import { MonthView } from './Calendar';
+import { EventEditor } from './EventEditor';
+import { MonthView, openShownEvent } from './Calendar';
 import { Card, Segmented, toast } from './ui';
 
 const MODE_KEY = 'daily-dashboard:schedule-mode';
@@ -90,8 +90,27 @@ function WeekPlanner() {
   const ownIds = useMemo(() => new Set(own.map((e) => e.id)), [own]);
   const use24h = useStore((s) => s.settings.use24h);
   const [weekStart, setWeekStart] = useState(() => mondayOf(t));
-  const [editing, setEditing] = useState<CalEvent | 'new' | null>(null);
-  const [newAt, setNewAt] = useState<{ date: string; start: string }>({ date: t, start: '09:00' });
+  const [editing, setEditing] = useState<ShownEvent | 'new' | null>(null);
+  const [newAt, setNewAt] = useState<{ date: string; start: string; end?: string }>({ date: t, start: '09:00' });
+  // Drag down an empty part of a day to make an event that long.
+  const [sel, setSel] = useState<{ date: string; from: number; to: number } | null>(null);
+  const selRef = useRef(sel);
+  selRef.current = sel;
+  useEffect(() => {
+    if (!sel) return;
+    const up = () => {
+      const x = selRef.current;
+      setSel(null);
+      if (!x) return;
+      const a = Math.min(x.from, x.to);
+      const b = Math.max(x.from, x.to);
+      if (b - a < 15) return; // a click, not a drag
+      setNewAt({ date: x.date, start: fromMinutes(a), end: fromMinutes(Math.min(b, 23 * 60 + 59)) });
+      setEditing('new');
+    };
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, [sel !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hint, setHint] = useState<{ date: string; min: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -143,7 +162,7 @@ function WeekPlanner() {
       const length = drag.task.estimate ?? 60;
       const start = fromMinutes(min);
       const end = fromMinutes(Math.min(min + length, 23 * 60 + 59));
-      actions.addEvent({ title: drag.task.title, date, start, end, notes: 'Time blocked from your task list' });
+      actions.addEvent({ title: drag.task.title, date, start, end, notes: 'Time blocked from your task list', taskId: drag.task.id });
       if (!drag.task.dueDate || drag.task.dueDate > date) actions.updateTask(drag.task.id, { dueDate: date });
       toast(`Blocked ${formatTime(start, use24h)}–${formatTime(end, use24h)} ${fromKey(date).toLocaleDateString(undefined, { weekday: 'short' })} for “${drag.task.title}”`);
     } else {
@@ -155,14 +174,7 @@ function WeekPlanner() {
     setHint(null);
   }
 
-  const openEvent = (e: ShownEvent) => {
-    if (e.jobId) {
-      location.hash = 'jobs';
-      setTimeout(() => window.dispatchEvent(new CustomEvent('dd:open-job', { detail: e.jobId })), 80);
-    } else if (e.google) {
-      if (e.google.link) window.open(e.google.link, '_blank', 'noopener');
-    } else setEditing(e);
-  };
+  const openEvent = (e: ShownEvent) => openShownEvent(e, setEditing);
 
   const range = `${fromKey(days[0]).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${fromKey(days[6]).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 
@@ -234,6 +246,16 @@ function WeekPlanner() {
                       setNewAt({ date: d, start: fromMinutes(minuteAt(e, e.currentTarget)) });
                       setEditing('new');
                     }}
+                    onMouseDown={(e) => {
+                      if (e.button !== 0 || (e.target as HTMLElement).closest('.wk-ev')) return;
+                      const m = minuteAt(e, e.currentTarget);
+                      setSel({ date: d, from: m, to: m });
+                    }}
+                    onMouseMove={(e) => {
+                      if (!sel || sel.date !== d) return;
+                      const m = minuteAt(e, e.currentTarget);
+                      if (m !== sel.to) setSel({ ...sel, to: m });
+                    }}
                     onDragOver={(e) => {
                       if (!drag) return;
                       e.preventDefault();
@@ -250,6 +272,11 @@ function WeekPlanner() {
                       <i key={h} className="wk-line" style={{ top: (h - startHour) * HOUR }} />
                     ))}
                     {d === t && <i className="wk-now" style={{ top: y(nowMinutes(now)) }} />}
+                    {sel?.date === d && Math.abs(sel.to - sel.from) >= 15 && (
+                      <div className="wk-drop" style={{ top: y(Math.min(sel.from, sel.to)), height: (Math.abs(sel.to - sel.from) / 60) * HOUR }}>
+                        {formatTime(fromMinutes(Math.min(sel.from, sel.to)), use24h)}–{formatTime(fromMinutes(Math.max(sel.from, sel.to)), use24h)}
+                      </div>
+                    )}
                     {hint?.date === d && drag && (
                       <div className="wk-drop" style={{ top: y(hint.min), height: ((drag.kind === 'task' ? drag.task.estimate ?? 60 : drag.length) / 60) * HOUR }}>
                         {formatTime(fromMinutes(hint.min), use24h)}
@@ -300,8 +327,8 @@ function WeekPlanner() {
             </div>
           </div>
         </div>
-        <p className="wk-help">Double-click a time to add an event. Drag a task from the list onto the calendar to block time for it; drag your own events to move them.</p>
-        <EventEditor event={editing} defaultDate={editing === 'new' ? newAt.date : t} defaultStart={editing === 'new' ? newAt.start : undefined} onClose={() => setEditing(null)} />
+        <p className="wk-help">Drag down a day (or double-click) to add an event. Drag a task from the list onto the calendar to block time for it; drag your own events to move them.</p>
+        <EventEditor event={editing} defaultDate={editing === 'new' ? newAt.date : t} defaultStart={editing === 'new' ? newAt.start : undefined} defaultEnd={editing === 'new' ? newAt.end : undefined} onClose={() => setEditing(null)} />
       </Card>
 
       <Card title="To schedule" meta={toSchedule.length ? `${toSchedule.length}` : undefined} className="wk-tasks">

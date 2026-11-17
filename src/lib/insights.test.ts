@@ -55,3 +55,18 @@ describe('insights', () => {
     expect(h.mood).toBeCloseTo(11 / 3);
   });
 });
+
+describe('when you focus best', () => {
+  it('spreads a session over the hours it ran in', async () => {
+    const { addHours } = await import('./store');
+    expect(addHours({}, new Date(2026, 10, 17, 9, 40).getTime(), 50)).toEqual({ 9: 20, 10: 30 });
+  });
+
+  it('finds the best two-hour stretch once there is enough history', async () => {
+    const { focusHours } = await import('./insights');
+    const { emptyState } = await import('./store');
+    const s = { ...emptyState(), focus: { '2026-11-16': { minutes: 200, sessions: 4, hours: { 9: 60, 10: 60, 15: 50, 16: 30 } } } };
+    expect(focusHours(s, '2026-11-17').best).toEqual([9, 11]);
+    expect(focusHours({ ...s, focus: { '2026-11-16': { minutes: 30, sessions: 1, hours: { 9: 30 } } } }, '2026-11-17').best).toBeNull();
+  });
+});

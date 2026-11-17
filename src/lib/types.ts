@@ -62,6 +62,45 @@ export interface CalEvent {
   end?: TimeKey;
   location?: string;
   notes?: string;
+  /** Repeats from `date` on. Each occurrence shows on its own day. */
+  repeat?: Repeat;
+  /** Repeating events: days left out ("delete just this one"). */
+  skip?: DateKey[];
+  /** Repeating events: the last day it happens. */
+  until?: DateKey;
+  /** A time block made for this task (by dragging it onto the calendar or auto-planning). */
+  taskId?: string;
+}
+
+/** An important date: a birthday, trip or deadline, counted down on Today and shown in the calendar. */
+export interface Countdown {
+  id: string;
+  title: string;
+  date: DateKey;
+  /** Comes back every year (birthdays, anniversaries). */
+  yearly?: boolean;
+  /** Optional emoji shown with it. */
+  emoji?: string;
+  createdAt: number;
+}
+
+export interface RoutineStep {
+  id: string;
+  title: string;
+  /** How long it takes, for the step timer. */
+  minutes?: number;
+}
+
+/** A morning, evening or other routine: steps done in order, with a timer for each. */
+export interface Routine {
+  id: string;
+  name: string;
+  steps: RoutineStep[];
+  /** Weekdays it's on, 0 = Sunday … 6 = Saturday. Missing = every day. */
+  days?: number[];
+  /** Steps done per day (step ids), kept for the last few weeks. */
+  log?: Record<DateKey, string[]>;
+  createdAt: number;
 }
 
 export interface Project {
@@ -163,6 +202,8 @@ export interface FocusDay {
   sessions: number;
   /** Minutes per thing you focused on (task id, or "priority"), with its title kept for history. */
   items?: Record<string, { title: string; minutes: number; projectId?: string }>;
+  /** Minutes per hour of the day ("9" = 9–10am), for "when you focus best". */
+  hours?: Record<string, number>;
 }
 
 export type TxKind = 'income' | 'expense';
@@ -233,6 +274,8 @@ export interface State {
   transactions: Transaction[];
   budgets: Budget[];
   savingsGoals: SavingsGoal[];
+  countdowns: Countdown[];
+  routines: Routine[];
   money: MoneySettings;
   /** The original single scratchpad. Kept for older versions; the Notes tab uses `pages`. */
   notes: string;

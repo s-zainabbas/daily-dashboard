@@ -9,7 +9,7 @@ export interface Parsed {
   start?: TimeKey;
   end?: TimeKey;
   priority?: Priority;
-  /** Set for "every …" phrases. A repeating item is always a task (any time stays in the title). */
+  /** Set for "every …" phrases. With a time it's a repeating event ("Standup 9:30 every weekday"), otherwise a repeating task. */
   repeat?: Repeat;
   /** Tasks only: how long it'll take, in minutes ("2h", "~30m", "1h30", "for 45m"). */
   estimate?: number;
@@ -145,9 +145,6 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
     // A start date ("from tomorrow", "starting nov 14") counts if it fits; otherwise the first day that does.
     out.date = firstDue(out.repeat, out.date ?? ref);
     out.repeat = anchored(out.repeat, out.date);
-    takeEstimate();
-    out.title = text.replace(/\s+/g, ' ').trim().replace(/\s+(on|at|by|due|from|starting)$/i, '').trim();
-    return out;
   }
 
   // Time range: "3-4pm", "14:00-15:30", "from 9 to 10am"
@@ -199,7 +196,7 @@ export function parseQuick(input: string, ref: DateKey = today()): Parsed {
   out.title = text
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/\s+(on|at|by|due|from)$/i, '')
+    .replace(/\s+(on|at|by|due|from|starting)$/i, '')
     .trim();
   return out;
 }

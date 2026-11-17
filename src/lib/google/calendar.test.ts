@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enableApiLink, plainText, toShown, type GCalendar, type GEvent } from './calendar';
+import { enableApiLink, plainText, toGoogleEvent, toRRule, toShown, type GCalendar, type GEvent } from './calendar';
 
 const cal: GCalendar = { id: 'me@example.com', name: 'Personal', color: '#4285f4', primary: true, selected: true };
 // Local wall-clock times as ISO strings with this machine's offset, like Google sends.
@@ -54,6 +54,21 @@ describe('descriptions', () => {
     expect(e.notes).toBe('Bring slides & laptop');
     expect(plainText('   ')).toBeUndefined();
     expect(plainText('x'.repeat(400))!.length).toBe(280);
+  });
+});
+
+describe('writing events to Google', () => {
+  it('turns repeat rules into Google’s format', () => {
+    expect(toRRule({ freq: 'weekdays' }, '2026-11-16')).toBe('RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR');
+    expect(toRRule({ freq: 'weekly' }, '2026-11-18')).toBe('RRULE:FREQ=WEEKLY;BYDAY=WE');
+    expect(toRRule({ freq: 'weekly', days: [1, 5], interval: 2 }, '2026-11-16')).toBe('RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR');
+  });
+  it('timed and all-day events', () => {
+    const timed = toGoogleEvent({ title: 'Call', date: '2026-11-16', start: '09:00', end: '09:30' }, 'Europe/London');
+    expect(timed.start).toEqual({ dateTime: new Date('2026-11-16T09:00:00').toISOString(), timeZone: 'Europe/London' });
+    expect(timed.end).toEqual({ dateTime: new Date('2026-11-16T09:30:00').toISOString(), timeZone: 'Europe/London' });
+    const allDay = toGoogleEvent({ title: 'Trip', date: '2026-11-16', repeat: { freq: 'yearly' } });
+    expect(allDay).toMatchObject({ start: { date: '2026-11-16' }, end: { date: '2026-11-17' }, recurrence: ['RRULE:FREQ=YEARLY'] });
   });
 });
 

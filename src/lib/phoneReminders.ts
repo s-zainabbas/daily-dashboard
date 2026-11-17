@@ -3,6 +3,7 @@ import { addDays, dateKey, toMinutes } from './date';
 import { CALENDAR_EVENTS_SCOPE, CALENDAR_SCOPE, currentToken, googleConfigured, requestToken, tokenHasScope } from './google/auth';
 import { CalendarError, deleteReminder, listReminderIds, putReminder, REMINDER_PREFIX, type ReminderEvent } from './google/calendar';
 import { interviewEvents } from './jobs';
+import { expandEvents } from './events';
 import { getState, onStateChange } from './store';
 import type { DateKey, State, TimeKey } from './types';
 
@@ -78,7 +79,7 @@ export function plannedReminders(s: State, now = new Date()): ReminderEvent[] {
 
   const lead = s.settings.eventReminder ?? 10;
   if (lead > 0) {
-    const events = [...s.events, ...interviewEvents(s.jobs)];
+    const events = [...expandEvents(s.events, t, last), ...interviewEvents(s.jobs)];
     for (const e of events) {
       if (!e.start || e.date < t || e.date > last) continue;
       const start = at(e.date, e.start);

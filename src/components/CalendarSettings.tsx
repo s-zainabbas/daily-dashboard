@@ -27,8 +27,8 @@ export function CalendarSection() {
       <section>
         <h3>Google Calendar</h3>
         <p className="sync-pitch">
-          Show your Google Calendar events in Schedule, next to your own. It only adds to your calendar if you later turn on phone reminders, and events aren’t
-          copied into your dashboard data.
+          Show your Google Calendar events in Schedule, next to your own. You can also add and change Google events from the dashboard (Google asks for
+          permission the first time). Events aren’t copied into your dashboard data.
         </p>
         <button type="button" className="btn primary google-btn" data-google-signin disabled={busy} onClick={connect}>
           <GoogleMark /> {busy ? 'Connecting…' : 'Connect Google Calendar'}

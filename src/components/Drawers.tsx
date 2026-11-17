@@ -9,6 +9,7 @@ import { useDriveSync } from '../lib/sync/driveSync';
 import { DriveSyncSection } from './DriveSync';
 import { RemindersSection } from './RemindersSettings';
 import { CalendarSection } from './CalendarSettings';
+import { GmailSection } from './Gmail';
 import { Dialog, DialogHead, Segmented, Switch, toast } from './ui';
 
 /* ---------- Settings ---------- */
@@ -86,6 +87,7 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
       <div className="drawer-body">
         <DriveSyncSection />
         <CalendarSection />
+        <GmailSection />
 
         <section>
           <h3>You</h3>
@@ -245,6 +247,7 @@ export const SHORTCUTS: [string[], string][] = [
   [['P'], 'Plan my day'],
   [['S'], 'Shut down for the day'],
   [['W'], 'Weekly review'],
+  [['F'], 'Focus mode (full screen)'],
   [['/'], 'Quick add'],
   [['N'], 'New task'],
   [['E'], 'New event'],

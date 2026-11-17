@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, CalendarRange, Check, Compass, MoonStar, NotebookPen, Sunrise, CalendarPlus, CheckCircle2, Circle, CornerDownLeft, Keyboard, ListPlus, Palette, Search, Settings, Square, SunMoon, Target, Wallet } from 'lucide-react';
+import { Hourglass, Maximize2, Wand2, BookOpen, Briefcase, BriefcaseBusiness, CalendarDays, CalendarRange, Check, Compass, MoonStar, NotebookPen, Sunrise, CalendarPlus, CheckCircle2, Circle, CornerDownLeft, Keyboard, ListPlus, Palette, Search, Settings, Square, SunMoon, Target, Wallet } from 'lucide-react';
 import { dueLabelInline, fromKey, today } from '../lib/date';
 import { useAllEvents } from '../lib/gcal';
 import type { ShownEvent } from '../lib/google/calendar';
@@ -8,6 +8,8 @@ import { actions, getState, useStore } from '../lib/store';
 import { useWork, workActions, workTitle } from '../lib/timer';
 import { loggedToast } from './Now';
 import { Dialog, toast } from './ui';
+import { NEW_COUNTDOWN_EVENT } from './Countdowns';
+import { openAutoPlan } from './AutoPlan';
 import { VIEWS, type View } from './Sidebar';
 
 interface Item {
@@ -33,6 +35,8 @@ export interface PaletteHandlers {
   /** Show the Now card on Today. */
   now: () => void;
   weekly: () => void;
+  /** Full-screen focus mode. */
+  focus: () => void;
 }
 
 export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: () => void; h: PaletteHandlers }) {
@@ -58,9 +62,12 @@ export function CommandPalette({ open, onClose, h }: { open: boolean; onClose: (
       { id: 'event', group: 'Create', label: 'New event', icon: <CalendarPlus size={16} />, hint: 'E', run: h.newEvent },
       { id: 'expense', group: 'Create', label: 'Add an expense', icon: <Wallet size={16} />, run: () => h.addMoney('expense') },
       { id: 'income', group: 'Create', label: 'Add income', icon: <Wallet size={16} />, run: () => h.addMoney('income') },
+      { id: 'countdown', group: 'Create', label: 'Add a countdown (birthday, trip, deadline)', icon: <Hourglass size={16} />, run: () => window.dispatchEvent(new CustomEvent(NEW_COUNTDOWN_EVENT)) },
       { id: 'job', group: 'Create', label: 'Save a job application', icon: <BriefcaseBusiness size={16} />, run: () => goAndFocus('jobs', 'job-link') },
       { id: 'plan', group: 'Focus', label: 'Plan my day', icon: <Sunrise size={16} />, hint: 'P', run: h.plan },
       { id: 'shutdown', group: 'Focus', label: 'Shut down for the day', icon: <MoonStar size={16} />, hint: 'S', run: h.shutdown },
+      { id: 'autoplan', group: 'Focus', label: 'Auto-plan today (time-block my tasks)', icon: <Wand2 size={16} />, run: openAutoPlan },
+      { id: 'focus-mode', group: 'Focus', label: 'Focus mode (full screen)', icon: <Maximize2 size={16} />, hint: 'F', run: h.focus },
       { id: 'now', group: 'Focus', label: 'What should I do now?', icon: <Compass size={16} />, run: h.now },
       { id: 'weekly', group: 'Focus', label: 'Weekly review', icon: <CalendarRange size={16} />, hint: 'W', run: h.weekly },
       ...(work.startedAt

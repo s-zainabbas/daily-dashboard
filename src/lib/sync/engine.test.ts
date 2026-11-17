@@ -397,6 +397,22 @@ describe('edits on two devices at once', () => {
     expect(titles(b.state).filter((t) => t === 'SEO research')).toHaveLength(1);
   });
 
+  it('syncs countdowns, and keeps routine steps ticked on both devices the same day', async () => {
+    const { a, b } = await pair();
+    const routine = { id: 'r1', name: 'Morning', steps: [{ id: 's1', title: 'Water' }, { id: 's2', title: 'Stretch' }], createdAt: 0 };
+    a.edit((s) => ({ ...s, routines: [routine], countdowns: [{ id: 'c1', title: 'Trip', date: '2026-12-20', createdAt: 0 }] }));
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    expect(b.state.countdowns.map((c) => c.title)).toEqual(['Trip']);
+    const tick = (id: string) => (s: State) => ({ ...s, routines: s.routines.map((r) => ({ ...r, log: { ...r.log, '2026-11-17': [...(r.log?.['2026-11-17'] ?? []), id] } })) });
+    a.edit(tick('s1'));
+    b.edit(tick('s2'));
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    await a.engine.syncNow();
+    for (const d of [a, b]) expect([...d.state.routines[0].log!['2026-11-17']].sort()).toEqual(['s1', 's2']);
+  });
+
   it('adds up focus minutes logged on both devices the same day', async () => {
     const { a, b } = await pair();
     a.edit((s) => ({ ...s, focus: { '2026-11-08': { minutes: 25, sessions: 1 } } }));

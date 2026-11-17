@@ -1,5 +1,5 @@
-import { addDays, dateKey } from '../date';
-import type { CalEvent, DateKey } from '../types';
+import { addDays, dateKey, fromKey } from '../date';
+import type { CalEvent, DateKey, Repeat } from '../types';
 import { CLIENT_ID } from './auth';
 
 /**
@@ -16,13 +16,31 @@ export interface GCalendar {
   primary: boolean;
   /** Ticked in Google Calendar's own sidebar. */
   selected: boolean;
+  /** You're allowed to add and change events in it (owner or writer). */
+  writable?: boolean;
 }
 
 /** An event shown on the dashboard. Google ones carry where they came from and can't be edited here. */
 export interface ShownEvent extends CalEvent {
-  google?: { calendar: string; color?: string; link?: string };
+  google?: {
+    calendar: string;
+    color?: string;
+    link?: string;
+    calendarId?: string;
+    eventId?: string;
+    /** You can change events in this calendar (with permission to edit). */
+    writable?: boolean;
+    /** Spans several days: edited in Google Calendar itself. */
+    multiDay?: boolean;
+    /** One day of a repeating Google event (editing changes just that day). */
+    recurring?: boolean;
+  };
   /** An interview from the Jobs tab. */
   jobId?: string;
+  /** One day of one of your repeating events. */
+  seriesId?: string;
+  /** An important date / countdown. */
+  countdownId?: string;
 }
 
 type GDate = { date?: string; dateTime?: string };
@@ -35,6 +53,7 @@ export interface GEvent {
   htmlLink?: string;
   start: GDate;
   end: GDate;
+  recurringEventId?: string;
   attendees?: { self?: boolean; responseStatus?: string }[];
 }
 
@@ -59,7 +78,7 @@ export function enableApiLink(googleMessage = '', clientId = ''): string {
 
 const get = <T,>(token: string, url: string) => call<T>(token, 'GET', url);
 
-async function call<T>(token: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown): Promise<T> {
+async function call<T>(token: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, body?: unknown): Promise<T> {
   let r: Response;
   try {
     r = await fetch(url, {
@@ -97,7 +116,7 @@ export async function listCalendars(token: string): Promise<GCalendar[]> {
   const j = await get<{ items?: any[] }>(token, `${API}/users/me/calendarList?minAccessRole=reader&maxResults=250`);
   return (j.items ?? [])
     .filter((c) => !c.deleted && !c.hidden)
-    .map((c) => ({ id: c.id, name: c.summaryOverride || c.summary || c.id, color: c.backgroundColor, primary: !!c.primary, selected: !!c.selected }))
+    .map((c) => ({ id: c.id, name: c.summaryOverride || c.summary || c.id, color: c.backgroundColor, primary: !!c.primary, selected: !!c.selected, writable: c.accessRole === 'owner' || c.accessRole === 'writer' }))
     .sort((a, b) => Number(b.primary) - Number(a.primary) || a.name.localeCompare(b.name));
 }
 
@@ -112,7 +131,7 @@ export async function listEvents(token: string, calendarId: string, from: DateKe
       timeMin: new Date(`${from}T00:00:00`).toISOString(),
       timeMax: new Date(`${to}T00:00:00`).toISOString(),
       maxResults: '250',
-      fields: 'items(id,status,summary,location,description,htmlLink,start,end,attendees(self,responseStatus)),nextPageToken',
+      fields: 'items(id,status,summary,location,description,htmlLink,start,end,recurringEventId,attendees(self,responseStatus)),nextPageToken',
     });
     if (page) q.set('pageToken', page);
     const j = await get<{ items?: GEvent[]; nextPageToken?: string }>(token, `${API}/calendars/${encodeURIComponent(calendarId)}/events?${q}`);
@@ -154,16 +173,17 @@ export function toShown(e: GEvent, cal: GCalendar): ShownEvent[] {
     title: e.summary?.trim() || '(No title)',
     location: e.location || undefined,
     notes: plainText(e.description),
-    google: { calendar: cal.name, color: cal.color, link: e.htmlLink },
+    google: { calendar: cal.name, color: cal.color, link: e.htmlLink, calendarId: cal.id, eventId: e.id, writable: !!cal.writable, ...(e.recurringEventId ? { recurring: true } : {}) },
   };
   const id = (d: DateKey) => `g:${cal.id}:${e.id}:${d}`;
+  const multi = (x: ShownEvent): ShownEvent => ({ ...x, google: { ...x.google!, multiDay: true } });
 
   if (e.start.date) {
     // All-day: the end date is exclusive.
     const out: ShownEvent[] = [];
     const end = e.end.date && e.end.date > e.start.date ? e.end.date : addDays(e.start.date, 1);
     for (let d = e.start.date, n = 0; d < end && n < 62; d = addDays(d, 1), n++) out.push({ ...base, id: id(d), date: d });
-    return out;
+    return out.length > 1 ? out.map(multi) : out;
   }
   if (!e.start.dateTime) return [];
   const s = new Date(e.start.dateTime);
@@ -177,7 +197,78 @@ export function toShown(e: GEvent, cal: GCalendar): ShownEvent[] {
   for (let d = addDays(sd, 1), n = 0; d < ed && n < 62; d = addDays(d, 1), n++) out.push({ ...base, id: id(d), date: d });
   // Last day: all-day if it runs to midnight, otherwise until its end time.
   out.push(hhmm(f) === '00:00' ? { ...base, id: id(ed), date: ed } : { ...base, id: id(ed), date: ed, start: '00:00', end: hhmm(f) });
-  return out;
+  return out.map(multi);
+}
+
+/* ---------- Adding and changing your own Google events ---------- */
+
+export interface EventInput {
+  title: string;
+  date: DateKey;
+  /** Missing = all day. */
+  start?: string;
+  end?: string;
+  location?: string;
+  notes?: string;
+  repeat?: Repeat;
+}
+
+const BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+/** A repeat rule in Google's (RFC 5545) form, e.g. RRULE:FREQ=WEEKLY;BYDAY=MO,WE. */
+export function toRRule(r: Repeat, date: DateKey): string {
+  const n = r.interval && r.interval > 1 ? `;INTERVAL=${r.interval}` : '';
+  switch (r.freq) {
+    case 'daily':
+      return `RRULE:FREQ=DAILY${n}`;
+    case 'weekdays':
+      return 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR';
+    case 'weekly':
+      return `RRULE:FREQ=WEEKLY${n};BYDAY=${(r.days?.length ? r.days : [fromKey(date).getDay()]).map((d) => BYDAY[d]).join(',')}`;
+    case 'monthly':
+      return `RRULE:FREQ=MONTHLY${n}`;
+    case 'yearly':
+      return `RRULE:FREQ=YEARLY${n}`;
+  }
+}
+
+/** The event in Google's format, in this device's time zone. */
+export function toGoogleEvent(e: EventInput, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const at = (t: string) => new Date(`${e.date}T${t}:00`);
+  let when;
+  if (e.start) {
+    const start = at(e.start);
+    // No end, or one before the start: half an hour.
+    const end = e.end && e.end > e.start ? at(e.end) : new Date(start.getTime() + 30 * 60_000);
+    when = { start: { dateTime: start.toISOString(), timeZone }, end: { dateTime: end.toISOString(), timeZone } };
+  } else {
+    when = { start: { date: e.date }, end: { date: addDays(e.date, 1) } }; // all day; Google's end date is exclusive
+  }
+  return {
+    summary: e.title,
+    location: e.location ?? '',
+    description: e.notes ?? '',
+    ...when,
+    ...(e.repeat ? { recurrence: [toRRule(e.repeat, e.date)] } : {}),
+  };
+}
+
+export async function createGoogleEvent(token: string, calendarId: string, e: EventInput): Promise<GEvent> {
+  return call<GEvent>(token, 'POST', `${API}/calendars/${encodeURIComponent(calendarId)}/events`, toGoogleEvent(e));
+}
+
+/** Change one event (for a repeating event: just this day). Repeats aren't changed from here. */
+export async function updateGoogleEvent(token: string, calendarId: string, eventId: string, e: EventInput): Promise<GEvent> {
+  const { recurrence: _ignored, ...body } = toGoogleEvent({ ...e, repeat: undefined }) as ReturnType<typeof toGoogleEvent> & { recurrence?: string[] };
+  return call<GEvent>(token, 'PATCH', `${API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, body);
+}
+
+export async function deleteGoogleEvent(token: string, calendarId: string, eventId: string): Promise<void> {
+  try {
+    await call(token, 'DELETE', `${API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
+  } catch (e) {
+    if (!(e instanceof CalendarError) || e.kind !== 'gone') throw e;
+  }
 }
 
 /* ---------- Phone reminders: events the dashboard writes to your main calendar ---------- */

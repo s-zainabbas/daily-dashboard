@@ -97,7 +97,7 @@ function stop(): Logged | undefined {
   const raw = elapsedMs() / 60_000;
   const minutes = Math.min(MAX_MINUTES, Math.round(raw));
   const title = workTitle();
-  if (minutes >= 1) actions.logFocus(minutes, work.taskId);
+  if (minutes >= 1) actions.logFocus(minutes, work.taskId, work.startedAt);
   set({ taskId: work.taskId });
   return { minutes, title, capped: raw > MAX_MINUTES };
 }
