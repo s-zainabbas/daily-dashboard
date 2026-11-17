@@ -1,5 +1,6 @@
-import { uid } from '../store';
-import { COLLECTIONS, VALUES, deepEqual, emptyCloud, type CloudData, type CollectionKey, type RecordEntry, type ValueKey } from './schema';
+import { fromKey } from '../date';
+import { rollover, uid } from '../store';
+import { COLLECTIONS, VALUES, deepEqual, emptyCloud, stamp, toState, type CloudData, type CollectionKey, type RecordEntry } from './schema';
 
 /**
  * Three-way merge: `base` is the copy both sides had at the last sync, `local` is this device now,
@@ -7,10 +8,15 @@ import { COLLECTIONS, VALUES, deepEqual, emptyCloud, type CloudData, type Collec
  *
  * - Changed on one side only → that side wins (so older data never overwrites newer).
  * - Changed on both sides, in different records or different fields → both changes are kept.
- * - Changed on both sides in the same field, or edited on one side and deleted on the other →
- *   a conflict for you to decide. Nothing is uploaded until you choose.
- * - Exceptions that are always safe: focus minutes are added up, settings take the newer change,
- *   "onboarded" stays on, and the active date takes the later day.
+ * - Changed on both sides in the same field → settled automatically, never asked about:
+ *   something beats nothing (a filled-in field is never wiped by an empty one), text that only had
+ *   more added on one side keeps the longer version, and otherwise the newer change wins.
+ * - Edited on one side and deleted on the other → the edited one is kept, so nothing is lost.
+ * - Focus minutes are added up, "onboarded" stays on, and the active date takes the later day.
+ * - A copy still on an earlier day is first moved on to today the way the dashboard does it each
+ *   morning (yesterday's review goes into the journal), so a new day never clashes with last night.
+ *
+ * Drive keeps earlier versions of the file, so anything replaced can still be restored.
  */
 
 export type Choice = 'local' | 'remote' | 'both';
@@ -39,7 +45,7 @@ export interface MergeResult {
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 
 /** Field-by-field three-way merge of plain values. `prefer` settles same-field conflicts. */
-export function merge3(b: unknown, l: unknown, r: unknown, prefer?: 'local' | 'remote', path = ''): { value: unknown; conflicts: ConflictField[] } {
+export function merge3(b: unknown, l: unknown, r: unknown, prefer?: 'local' | 'remote', path = '', newer: 'local' | 'remote' = 'local'): { value: unknown; conflicts: ConflictField[] } {
   if (deepEqual(l, r)) return { value: l, conflicts: [] };
   if (deepEqual(l, b)) return { value: r, conflicts: [] };
   if (deepEqual(r, b)) return { value: l, conflicts: [] };
@@ -48,45 +54,27 @@ export function merge3(b: unknown, l: unknown, r: unknown, prefer?: 'local' | 'r
     const out: Record<string, unknown> = {};
     const conflicts: ConflictField[] = [];
     for (const k of new Set([...Object.keys(l), ...Object.keys(r)])) {
-      const m = merge3(bo[k], l[k], r[k], prefer, path ? `${path}.${k}` : k);
+      const m = merge3(bo[k], l[k], r[k], prefer, path ? `${path}.${k}` : k, newer);
       if (m.value !== undefined) out[k] = m.value;
       conflicts.push(...m.conflicts);
     }
     return { value: out, conflicts };
   }
   if (prefer) return { value: prefer === 'local' ? l : r, conflicts: [] };
-  return { value: l, conflicts: [{ path: path || 'value', local: l, remote: r }] };
+  return { value: pick(l, r, newer), conflicts: [] };
 }
 
-const WHAT: Record<CollectionKey | ValueKey, string> = {
-  tasks: 'Task',
-  events: 'Event',
-  projects: 'Project',
-  habits: 'Habit',
-  links: 'Quick link',
-  jobs: 'Job application',
-  journal: 'Journal day',
-  focus: 'Focus log',
-  pages: 'Note',
-  transactions: 'Transaction',
-  budgets: 'Budget',
-  savingsGoals: 'Savings goal',
-  notes: 'Notes',
-  priority: 'Today’s #1 priority',
-  reflection: 'End-of-day review',
-  settings: 'Settings',
-  onboarded: 'Setup',
-  lastActiveDate: 'Active date',
-  week: 'Weekly goals',
-  money: 'Expense settings',
-};
+const isEmpty = (x: unknown) =>
+  x === undefined || x === null || x === '' || x === false || (typeof x === 'string' && !x.trim()) || (Array.isArray(x) && !x.length) || (isObj(x) && Object.values(x).every(isEmpty));
 
-function labelOf(c: CollectionKey, id: string, data: any): string {
-  if (!data) return id;
-  if (c === 'transactions') return [data.note || data.category, data.amount, data.date].filter(Boolean).join(' · ') || id;
-  if (c === 'budgets') return `${data.category} budget`;
-  if (c === 'jobs') return [data.role, data.company].filter(Boolean).join(' at ') || data.url || id;
-  return String(data.title ?? data.name ?? data.label ?? data.date ?? id);
+/** Settle one field both sides changed: something beats nothing, added-to text keeps the longer, else the newer change. */
+function pick(l: unknown, r: unknown, newer: 'local' | 'remote'): unknown {
+  if (isEmpty(l) !== isEmpty(r)) return isEmpty(l) ? r : l;
+  if (typeof l === 'string' && typeof r === 'string') {
+    if (r.includes(l.trim())) return r;
+    if (l.includes(r.trim())) return l;
+  }
+  return newer === 'local' ? l : r;
 }
 
 const live = (e?: RecordEntry) => !!e && !e.deleted;
@@ -105,16 +93,12 @@ function mergeRecord(
   if (sameEntry(l, b)) return keep(r ?? (b ? { t: Date.now(), deleted: true } : undefined));
   if (sameEntry(r, b)) return keep(l ?? (b ? { t: Date.now(), deleted: true } : undefined));
 
-  const conflictBase = { id: `${c}:${id}`, what: WHAT[c], canKeepBoth: false };
   // Edited on one side, deleted on the other.
   if (!live(l) || !live(r)) {
     if (choice === 'local') return keep(l);
     if (choice === 'remote') return keep(r);
-    const edited = live(l) ? l! : r!;
-    return {
-      ...keep(l),
-      conflict: { ...conflictBase, label: labelOf(c, id, edited.data), kind: 'delete', deletedOn: live(l) ? 'remote' : 'local', fields: [] },
-    };
+    // Keep the edited one: bringing back something deleted is easy to undo, a lost edit isn't.
+    return keep(live(l) ? l : r);
   }
   // Edited on both sides.
   const bd = live(b) ? b!.data : undefined;
@@ -138,13 +122,8 @@ function mergeRecord(
     const copyId = uid();
     return { entries: [[id, r!], [copyId, { t: l!.t, data: { ...l!.data, id: copyId } }]] };
   }
-  const m = merge3(bd, l!.data, r!.data, choice === 'local' || choice === 'remote' ? choice : undefined);
-  const merged: RecordEntry = { t: Math.max(l!.t, r!.t), data: m.value };
-  if (!m.conflicts.length) return keep(merged);
-  return {
-    ...keep(l),
-    conflict: { ...conflictBase, canKeepBoth: c !== 'journal', label: labelOf(c, id, l!.data), kind: 'edit', fields: m.conflicts },
-  };
+  const m = merge3(bd, l!.data, r!.data, choice === 'local' || choice === 'remote' ? choice : undefined, '', l!.t >= r!.t ? 'local' : 'remote');
+  return keep({ t: Math.max(l!.t, r!.t), data: m.value });
 }
 
 export function mergeCloud(base: CloudData, local: CloudData, remote: CloudData, resolutions: Resolutions = {}): MergeResult {
@@ -197,21 +176,35 @@ export function mergeCloud(base: CloudData, local: CloudData, remote: CloudData,
       out.values[v] = { t, value: `${String(l.value).trimEnd()}\n\n${String(r.value).trimStart()}` };
       continue;
     }
-    const m = merge3(b?.value, l.value, r.value, prefer);
+    const m = merge3(b?.value, l.value, r.value, prefer, '', l.t >= r.t ? 'local' : 'remote');
     out.values[v] = { t, value: m.value };
-    if (m.conflicts.length) {
-      out.values[v] = l;
-      conflicts.push({
-        id: `value:${v}`,
-        what: WHAT[v],
-        label: v === 'notes' ? 'Your notes' : v === 'priority' ? String(l.value?.title || r.value?.title || '') : WHAT[v],
-        kind: 'edit',
-        fields: m.conflicts,
-        canKeepBoth: v === 'notes',
-      });
-    }
   }
   return { data: out, conflicts };
+}
+
+/**
+ * Move a copy that's still on an earlier day on to `day`, exactly as the dashboard does each
+ * morning: the day's review and priority go into the journal and the daily fields reset.
+ * Records it doesn't touch keep their timestamps.
+ */
+export function rollForward(d: CloudData, day: string, now = Date.now()): CloudData {
+  const at = String(d.values.lastActiveDate?.value ?? '');
+  if (!at || at >= day) return d;
+  const state = toState(d);
+  const next = rollover(state, fromKey(day));
+  if (next === state) return d;
+  const out = stamp(next, d, now, d.device);
+  out.savedAt = d.savedAt;
+  return out;
+}
+
+/** Bring both copies to the same day before merging, so a new day isn't seen as two clashing edits. */
+export function sameDay(local: CloudData, remote: CloudData, now = Date.now()): { local: CloudData; remote: CloudData } {
+  const l = String(local.values.lastActiveDate?.value ?? '');
+  const r = String(remote.values.lastActiveDate?.value ?? '');
+  if (!l || !r || l === r) return { local, remote };
+  const day = l > r ? l : r;
+  return { local: rollForward(local, day, now), remote: rollForward(remote, day, now) };
 }
 
 /** Combine two whole copies with no shared history, e.g. two copies of the Drive file. */

@@ -2,7 +2,7 @@ import type { GoogleAccount } from '../google/auth';
 import { DriveError, type DriveApi, type DriveFile, type DriveRevision } from '../google/drive';
 import type { State } from '../types';
 import { hash, type MetaStore, type SyncMeta } from './local';
-import { mergeCloud, unionCloud, type Conflict, type Resolutions, type Choice } from './merge';
+import { mergeCloud, sameDay, unionCloud, type Conflict, type Resolutions, type Choice } from './merge';
 import { CorruptBackupError, NewerSchemaError, contentOf, emptyCloud, hasContent, parseCloud, serialize, stamp, summarize, toState, type CloudData } from './schema';
 
 /**
@@ -61,7 +61,7 @@ const BACKOFF_MS = [5_000, 15_000, 60_000, 300_000];
 /** Identifies the content of a Drive file. Drive bumps `version` for its own housekeeping too, so prefer the revision id. */
 const rev = (f: DriveFile) => f.headRevisionId ?? f.version;
 
-const PAUSED_MSG = 'Google sign-in expired. Tap “Sync now” to continue — your changes are saved on this device.';
+const PAUSED_MSG = 'Syncs again on your next tap or click (Google asks for that once an hour). Your changes are saved on this device.';
 
 export class SyncEngine {
   private view: SyncView;
@@ -252,7 +252,9 @@ export class SyncEngine {
       const local = stamp(state, base, now, device);
       let result = local;
       if (remote) {
-        const merged = mergeCloud(base ?? emptyCloud(), local, remote, this.resolutions);
+        // A copy saved yesterday is moved on to today first, the way this device already was.
+        const aligned = sameDay(local, remote, now);
+        const merged = mergeCloud(base ?? emptyCloud(), aligned.local, aligned.remote, this.resolutions);
         if (merged.conflicts.length) {
           const n = merged.conflicts.length;
           return this.set({ status: 'conflict', conflicts: merged.conflicts, message: `${n} change${n === 1 ? '' : 's'} made on different devices need${n === 1 ? 's' : ''} your choice. Nothing is uploaded until you decide.` });

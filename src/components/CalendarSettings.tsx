@@ -30,7 +30,7 @@ export function CalendarSection() {
           Show your Google Calendar events in Schedule, next to your own. It only adds to your calendar if you later turn on phone reminders, and events aren’t
           copied into your dashboard data.
         </p>
-        <button type="button" className="btn primary google-btn" disabled={busy} onClick={connect}>
+        <button type="button" className="btn primary google-btn" data-google-signin disabled={busy} onClick={connect}>
           <GoogleMark /> {busy ? 'Connecting…' : 'Connect Google Calendar'}
         </button>
       </section>
@@ -87,7 +87,7 @@ export function CalendarSection() {
 
       <div className="row sync-actions">
         {g.status === 'needs-auth' ? (
-          <button className="btn primary" onClick={connect} disabled={busy}>
+          <button className="btn primary" data-google-signin onClick={connect} disabled={busy}>
             <RefreshCw size={14} /> Reconnect
           </button>
         ) : (
@@ -122,7 +122,7 @@ function PhoneReminders({ email, now }: { email?: string; now: Date }) {
           A browser tab can’t alert you once it’s closed. Turn this on and your task reminders, events and interviews for the next 30 days are added to your main
           Google Calendar with an alert, so Google notifies you on your phone and laptop. They update when you edit, tick off or delete things here.
         </p>
-        <button type="button" className="btn" disabled={busy} onClick={() => run(enablePhoneReminders(email), 'Couldn’t turn on reminders.')}>
+        <button type="button" className="btn" data-google-signin disabled={busy} onClick={() => run(enablePhoneReminders(email), 'Couldn’t turn on reminders.')}>
           <BellRing size={14} /> {busy ? 'Connecting…' : 'Send reminders to Google Calendar'}
         </button>
       </div>
@@ -147,7 +147,7 @@ function PhoneReminders({ email, now }: { email?: string; now: Date }) {
       </div>
       <div className="row sync-actions">
         {r.status === 'needs-auth' ? (
-          <button className="btn primary" disabled={busy} onClick={() => run(enablePhoneReminders(email), 'Couldn’t reconnect.')}>
+          <button className="btn primary" data-google-signin disabled={busy} onClick={() => run(enablePhoneReminders(email), 'Couldn’t reconnect.')}>
             <RefreshCw size={14} /> Reconnect
           </button>
         ) : (

@@ -4,8 +4,8 @@ import { demoMode } from '../store';
  * Google sign-in with Google Identity Services' token model — Google's recommended flow for a
  * browser app with no server. It gives a short-lived access token (about an hour) and never a
  * refresh token or client secret, so nothing long-lived is ever stored in the browser.
- * A new token can only be requested from a tap or click (Google opens a small popup), which is
- * why sync pauses after an hour until you next tap "Sync now".
+ * A new token can only be requested from a tap or click (Google opens a small popup that closes
+ * by itself), so the dashboard renews it on your next tap anywhere (see driveSync.ts).
  */
 
 export const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || '';

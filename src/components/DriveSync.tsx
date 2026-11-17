@@ -54,7 +54,7 @@ export function syncStatus(v: SyncView): { text: string; tone: Tone } {
     case 'offline':
       return { text: 'Offline — changes are saved here and will sync when you’re back online', tone: 'idle' };
     case 'paused':
-      return { text: v.message ?? 'Sign-in expired — tap “Sync now” to check for changes', tone: v.pending ? 'busy' : 'idle' };
+      return { text: v.message ?? 'Syncs again on your next tap or click', tone: v.pending ? 'busy' : 'idle' };
     case 'conflict':
       return { text: v.message ?? 'Some changes need your choice', tone: 'bad' };
     case 'choose':
@@ -109,6 +109,7 @@ export function ConnectButton({ label = 'Connect Google Drive', className = 'btn
     <button
       type="button"
       className={`${className} google-btn`}
+      data-google-signin
       disabled={busy}
       onClick={() => {
         setBusy(true);
@@ -138,6 +139,7 @@ export function SyncButton({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <button
       className={`icon-btn${tapToSync && v.pending ? ' attention' : ''}`}
+      data-google-signin
       onClick={() => (v.conflicts.length ? openSyncPanel('conflicts') : tapToSync ? syncNow() : onOpenSettings())}
       title={`${v.account.email} · ${tapToSync ? 'Tap to sync' : text}`}
       aria-label={`Google Drive sync: ${tapToSync ? 'tap to sync' : text}`}
@@ -193,7 +195,7 @@ export function DriveSyncSection() {
             Review {v.conflicts.length} change{v.conflicts.length === 1 ? '' : 's'}
           </button>
         ) : (
-          <button className="btn primary" onClick={() => syncNow()} disabled={busy}>
+          <button className="btn primary" data-google-signin onClick={() => syncNow()} disabled={busy}>
             <RefreshCw size={14} /> {v.status === 'paused' ? 'Reconnect & sync' : 'Sync now'}
           </button>
         )}
@@ -220,7 +222,7 @@ export function DriveSyncSection() {
       </div>
       <StaySignedInSetting />
       <div className="row sync-actions">
-        <button className="btn ghost" onClick={() => connectGoogle('switch')}>
+        <button className="btn ghost" data-google-signin onClick={() => connectGoogle('switch')}>
           <Repeat size={14} /> Switch account
         </button>
         <button
@@ -240,7 +242,7 @@ function StaySignedInSetting() {
     <div className="setting">
       <div>
         <b>Stay signed in</b>
-        <small>Google’s sign-in lasts an hour. This renews it on your next click before it runs out (a Google window may flash for a second).</small>
+        <small>Google’s sign-in lasts an hour. This renews it on your next tap or click anywhere, even after it’s run out, so sync just carries on (a Google window may flash for a second).</small>
       </div>
       <Switch
         label="Stay signed in"
@@ -430,7 +432,7 @@ function RestoreDialog({ open }: { open: boolean }) {
           Replace the data on this device with a version saved in Google Drive. Your current data is kept as a backup, and you can undo right after. Your other devices get the restored version on their next sync.
         </p>
         {needsAuth ? (
-          <button className="btn primary" onClick={() => connectGoogle('reconnect').then(load)}>
+          <button className="btn primary" data-google-signin onClick={() => connectGoogle('reconnect').then(load)}>
             <GoogleMark /> Reconnect to see saved versions
           </button>
         ) : error ? (

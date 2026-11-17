@@ -74,6 +74,23 @@ describe('Google Calendar refresh', () => {
     expect(g.getGcal().errorLink).toContain('calendar-json.googleapis.com');
   });
 
+  it('loads more when you browse past what’s loaded, and not again after', async () => {
+    const fetch = google({ calendarList: { items: [{ id: 'me', summary: 'Me', primary: true, selected: true }] }, '/calendars/me/events': { items: [] } });
+    vi.stubGlobal('fetch', fetch);
+    const { addDays } = await import('./date');
+    const g = await setup();
+    await g.refreshCalendar(true);
+    const before = fetch.mock.calls.length;
+    const far = addDays(today(), 120);
+    await g.ensureCalendarRange(far, addDays(far, 30));
+    const urls = fetch.mock.calls.slice(before).map(([u]) => String(u)).filter((u) => u.includes('/events?'));
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0]).searchParams.get('timeMax')! >= new Date(`${addDays(far, 31)}T00:00:00`).toISOString()).toBe(true);
+    const after = fetch.mock.calls.length;
+    await g.ensureCalendarRange(far, addDays(far, 10));
+    expect(fetch.mock.calls.length).toBe(after);
+  });
+
   it('merges Google events after your own', async () => {
     const g = await setup();
     const own = [{ id: 'x', title: 'Mine', date: today() }];

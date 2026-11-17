@@ -1,28 +1,31 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
+import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, GripVertical, LayoutGrid } from 'lucide-react';
 import { addDays, formatDuration, formatTime, fromKey, fromMinutes, nowMinutes, toMinutes, today as todayKey } from '../lib/date';
-import { useAllEvents } from '../lib/gcal';
+import { ensureCalendarRange, useAllEvents, useGcal } from '../lib/gcal';
 import type { ShownEvent } from '../lib/google/calendar';
 import { useNow } from '../lib/hooks';
 import { actions, getState, useStore } from '../lib/store';
 import type { CalEvent, Task } from '../lib/types';
 import { mondayOf } from '../lib/week';
 import { EventEditor } from './Schedule';
+import { MonthView } from './Calendar';
 import { Card, Segmented, toast } from './ui';
 
 const MODE_KEY = 'daily-dashboard:schedule-mode';
+type Mode = 'day' | 'week' | 'month';
 const HOUR = 44; // px per hour
 
 /** Schedule tab: switch between the day agenda and a 7-day planner. */
 export function ScheduleTab({ dayView }: { dayView: ReactNode }) {
-  const [mode, setModeState] = useState<'day' | 'week'>(() => {
+  const [mode, setModeState] = useState<Mode>(() => {
     try {
-      return localStorage.getItem(MODE_KEY) === 'week' ? 'week' : 'day';
+      const saved = localStorage.getItem(MODE_KEY);
+      return saved === 'day' || saved === 'week' ? saved : 'month';
     } catch {
-      return 'day';
+      return 'month';
     }
   });
-  const setMode = (m: 'day' | 'week') => {
+  const setMode = (m: Mode) => {
     setModeState(m);
     try {
       localStorage.setItem(MODE_KEY, m);
@@ -40,10 +43,11 @@ export function ScheduleTab({ dayView }: { dayView: ReactNode }) {
           options={[
             { value: 'day', label: <><CalendarDays size={13} /> Day</> },
             { value: 'week', label: <><CalendarRange size={13} /> Week</> },
+            { value: 'month', label: <><LayoutGrid size={13} /> Month</> },
           ]}
         />
       </div>
-      {mode === 'day' ? dayView : <WeekPlanner />}
+      {mode === 'day' ? dayView : mode === 'week' ? <WeekPlanner /> : <MonthView />}
     </div>
   );
 }
@@ -93,6 +97,10 @@ function WeekPlanner() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const gcalOn = useGcal().enabled;
+  useEffect(() => {
+    if (gcalOn) void ensureCalendarRange(weekStart, addDays(weekStart, 6));
+  }, [weekStart, gcalOn]);
   const weekEvents = events.filter((e) => e.date >= days[0] && e.date <= days[6]);
   const timed = weekEvents.filter((e) => e.start);
   const startHour = Math.min(7, ...timed.map((e) => Math.floor(toMinutes(e.start!) / 60)));

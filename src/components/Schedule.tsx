@@ -8,6 +8,7 @@ import type { ShownEvent } from '../lib/google/calendar';
 import { useDriveSync } from '../lib/sync/driveSync';
 import type { CalEvent } from '../lib/types';
 import { Card, Dialog, DialogHead, Empty, toast } from './ui';
+import { MiniMonth, UpcomingDays } from './Calendar';
 
 const endOf = (e: CalEvent) => (e.end ? toMinutes(e.end) : toMinutes(e.start!) + 30);
 
@@ -73,10 +74,6 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
       timed: list.filter((e) => e.start).sort((a, b) => a.start!.localeCompare(b.start!)),
     };
   }, [events, day]);
-  const tomorrow = useMemo(
-    () => events.filter((e) => e.date === addDays(day, 1)).sort((a, b) => (a.start ?? '').localeCompare(b.start ?? '')),
-    [events, day],
-  );
 
   // Visible range for the day bar: at least 8am–8pm, stretched to fit events.
   const rangeStart = Math.min(8 * 60, ...timed.map((e) => Math.floor(toMinutes(e.start!) / 60) * 60));
@@ -95,8 +92,10 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
     const card = agenda?.closest('section');
     const target = agenda?.querySelector<HTMLElement>('.ev.now, .now-line');
     if (!card || !target || card.scrollHeight <= card.clientHeight) return;
-    const head = card.querySelector<HTMLElement>('.card-head')?.offsetHeight ?? 0;
-    card.scrollTop = target.getBoundingClientRect().top - card.getBoundingClientRect().top + card.scrollTop - head - 8;
+    // Scroll only as far as needed to show what's on now, so the calendar above stays in view when it can.
+    const top = target.getBoundingClientRect().top - card.getBoundingClientRect().top + card.scrollTop;
+    const want = top + target.offsetHeight + 96 - card.clientHeight;
+    if (want > card.scrollTop) card.scrollTop = want;
   }, [day, timed.length]);
 
   return (
@@ -133,12 +132,18 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
           )}
           <button
             className="btn sm ghost"
+            data-google-signin
             onClick={() => (gcal.status === 'needs-auth' ? connectCalendar(account?.email) : refreshCalendar(true))}
           >
             <RefreshCw size={13} /> {gcal.status === 'needs-auth' ? 'Reconnect' : 'Retry'}
           </button>
         </div>
       )}
+      <MiniMonth selected={day} onSelect={setDay} />
+      <div className="day-label">
+        {fromKey(day).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+        {!isToday && <small>{dayTitle}</small>}
+      </div>
       <div className="daybar" aria-hidden>
         <div className="daybar-track">
           {isToday && <div className="daybar-past" style={{ width: pct(m) }} />}
@@ -227,21 +232,7 @@ export function Schedule({ editRequest = 0, onRequestHandled }: { editRequest?: 
         </div>
       )}
 
-      <div className="tomorrow">
-        <h3>{isToday ? 'Tomorrow' : 'Next day'}</h3>
-        {tomorrow.length ? (
-          tomorrow.slice(0, 4).map((e) => (
-            <div className="tomorrow-item" key={e.id}>
-              <time className="num">{e.start ? fmt(e.start) : 'All day'}</time>
-              <span>{e.title}</span>
-            </div>
-          ))
-        ) : (
-          <div className="tomorrow-item" style={{ color: 'var(--muted)' }}>
-            Nothing scheduled yet.
-          </div>
-        )}
-      </div>
+      <UpcomingDays after={day} onSelect={setDay} />
 
       <EventEditor event={editing} defaultDate={day} onClose={() => setEditing(null)} />
     </Card>

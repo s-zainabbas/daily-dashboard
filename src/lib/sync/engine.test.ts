@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DriveError, type DriveApi, type DriveFile } from '../google/drive';
-import { emptyState, normalize } from '../store';
+import { fromKey } from '../date';
+import { emptyState, normalize, rollover } from '../store';
 import type { State, Task } from '../types';
 import { SyncEngine } from './engine';
 import type { MetaStore, SyncMeta } from './local';
@@ -329,56 +330,71 @@ describe('edits on two devices at once', () => {
     }
   });
 
-  it('asks when the same field changed on both, and uploads nothing until answered', async () => {
+  it('never asks: the same field changed on both settles on its own and syncs', async () => {
     const { a, b, t1, drive } = await pair();
     a.edit(editTask(t1.id, { title: 'Laptop title' }));
     b.edit(editTask(t1.id, { title: 'Phone title' }));
     await a.engine.syncNow();
     const versionBefore = drive.only().version;
     await b.engine.syncNow();
-    expect(b.view.status).toBe('conflict');
-    expect(b.view.conflicts[0]).toMatchObject({ what: 'Task', label: 'Phone title', canKeepBoth: true });
-    expect(b.view.conflicts[0].fields[0]).toMatchObject({ path: 'title', local: 'Phone title', remote: 'Laptop title' });
-    expect(drive.only().version).toBe(versionBefore);
-    expect(b.state.tasks[0].title).toBe('Phone title'); // nothing discarded
-
-    await b.engine.resolve({ [b.view.conflicts[0]?.id ?? `tasks:${t1.id}`]: 'remote' });
     expect(b.view.status).toBe('synced');
-    expect(b.state.tasks[0].title).toBe('Laptop title');
+    expect(b.view.conflicts).toEqual([]);
+    expect(drive.only().version).toBeGreaterThan(versionBefore);
+    await a.engine.syncNow();
+    expect(a.state.tasks.find((x) => x.id === t1.id)!.title).toBe(b.state.tasks.find((x) => x.id === t1.id)!.title);
   });
 
-  it('“keep both” keeps two copies', async () => {
-    const { a, b, t1 } = await pair();
-    a.edit(editTask(t1.id, { title: 'Laptop title' }));
-    b.edit(editTask(t1.id, { title: 'Phone title' }));
-    await a.engine.syncNow();
-    await b.engine.syncNow();
-    await b.engine.resolve({ [`tasks:${t1.id}`]: 'both' });
-    await a.engine.syncNow();
-    expect(titles(a.state)).toEqual(['Laptop title', 'Phone title']);
-  });
-
-  it('asks when a task was edited on one device and deleted on the other', async () => {
+  it('keeps a task that was edited on one device and deleted on the other', async () => {
     const { a, b, t1 } = await pair();
     a.edit(removeTask(t1.id));
     b.edit(editTask(t1.id, { done: true }));
     await a.engine.syncNow();
     await b.engine.syncNow();
-    expect(b.view.conflicts[0]).toMatchObject({ kind: 'delete', deletedOn: 'remote' });
-    await b.engine.resolve({ [`tasks:${t1.id}`]: 'local' }); // keep the edited task
+    expect(b.view.status).toBe('synced');
     await a.engine.syncNow();
     expect(a.state.tasks[0]).toMatchObject({ id: t1.id, done: true });
   });
 
-  it('asks about notes edited on both, and can keep both texts', async () => {
+  it('never wipes something with nothing, and keeps the longer of added-to notes', async () => {
     const { a, b } = await pair();
-    a.edit((s) => ({ ...s, notes: 'Laptop idea' }));
-    b.edit((s) => ({ ...s, notes: 'Phone idea' }));
+    a.edit((s) => ({ ...s, notes: 'Idea', priority: { title: 'Ship it', done: false } }));
     await a.engine.syncNow();
     await b.engine.syncNow();
-    expect(b.view.conflicts[0]).toMatchObject({ id: 'value:notes', canKeepBoth: true });
-    await b.engine.resolve({ 'value:notes': 'both' });
-    expect(b.state.notes).toBe('Phone idea\n\nLaptop idea');
+    a.edit((s) => ({ ...s, notes: 'Idea, and a second thought', priority: { title: '', done: false } }));
+    b.edit((s) => ({ ...s, notes: 'Idea plus', priority: { title: 'Ship it today', done: false } }));
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    expect(b.view.status).toBe('synced');
+    expect(b.state.priority.title).toBe('Ship it today');
+    // Both added different text: the newer change wins (both devices end up the same).
+    await a.engine.syncNow();
+    expect(a.state.notes).toBe(b.state.notes);
+  });
+
+  it('a new day on one device doesn’t clash with last night’s review from the other', async () => {
+    const day1 = '2026-11-16';
+    const api = drives({ default: new FakeDrive() });
+    const a = device(api, 'laptop');
+    const b = device(api, 'phone');
+    for (const d of [a, b]) d.edit((s) => ({ ...s, lastActiveDate: day1 }));
+    await a.engine.connected(ACC1);
+    await b.engine.connected(ACC1);
+    // Phone writes the evening review…
+    b.edit((s) => ({ ...s, reflection: { shipped: 'Meeting and CRM progress', slipped: 'WiFi kept cutting off', carries: 'SEO research' } }));
+    await b.engine.syncNow();
+    // …while the laptop, not yet synced, opens the next morning and starts a new day.
+    a.edit((s) => rollover(s, fromKey('2026-11-17')));
+    await a.engine.syncNow();
+    expect(a.view.status).toBe('synced');
+    expect(a.view.conflicts).toEqual([]);
+    expect(a.state.reflection).toMatchObject({ shipped: '', slipped: '', carries: '' });
+    expect(a.state.journal.find((j) => j.date === day1)).toMatchObject({ shipped: 'Meeting and CRM progress', slipped: 'WiFi kept cutting off' });
+    expect(titles(a.state)).toContain('SEO research');
+    // The phone catches up to the new day with the same result.
+    await b.engine.syncNow();
+    expect(b.state.lastActiveDate).toBe('2026-11-17');
+    expect(b.state.journal.find((j) => j.date === day1)?.shipped).toBe('Meeting and CRM progress');
+    expect(titles(b.state).filter((t) => t === 'SEO research')).toHaveLength(1);
   });
 
   it('adds up focus minutes logged on both devices the same day', async () => {

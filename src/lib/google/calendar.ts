@@ -104,8 +104,8 @@ export async function listCalendars(token: string): Promise<GCalendar[]> {
 export async function listEvents(token: string, calendarId: string, from: DateKey, to: DateKey): Promise<GEvent[]> {
   const out: GEvent[] = [];
   let page: string | undefined;
-  // A few pages at most: 250 events each is plenty for a ~2 month window.
-  for (let i = 0; i < 4; i++) {
+  // A handful of pages at most: 250 events each covers several months of a busy calendar.
+  for (let i = 0; i < 8; i++) {
     const q = new URLSearchParams({
       singleEvents: 'true', // expand repeating events into single ones
       orderBy: 'startTime',
@@ -123,6 +123,23 @@ export async function listEvents(token: string, calendarId: string, from: DateKe
   return out;
 }
 
+/** Google descriptions can be HTML; keep a short plain-text version for the dashboard. */
+export function plainText(html?: string): string | undefined {
+  if (!html) return undefined;
+  const text = html
+    .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text ? (text.length > 280 ? `${text.slice(0, 279)}…` : text) : undefined;
+}
+
 const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 /**
@@ -136,6 +153,7 @@ export function toShown(e: GEvent, cal: GCalendar): ShownEvent[] {
   const base = {
     title: e.summary?.trim() || '(No title)',
     location: e.location || undefined,
+    notes: plainText(e.description),
     google: { calendar: cal.name, color: cal.color, link: e.htmlLink },
   };
   const id = (d: DateKey) => `g:${cal.id}:${e.id}:${d}`;

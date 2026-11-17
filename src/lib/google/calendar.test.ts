@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enableApiLink, toShown, type GCalendar, type GEvent } from './calendar';
+import { enableApiLink, plainText, toShown, type GCalendar, type GEvent } from './calendar';
 
 const cal: GCalendar = { id: 'me@example.com', name: 'Personal', color: '#4285f4', primary: true, selected: true };
 // Local wall-clock times as ISO strings with this machine's offset, like Google sends.
@@ -45,6 +45,15 @@ describe('toShown', () => {
     expect(toShown(ev({ ...when, status: 'cancelled' }), cal)).toEqual([]);
     expect(toShown(ev({ ...when, attendees: [{ self: true, responseStatus: 'declined' }] }), cal)).toEqual([]);
     expect(toShown(ev({ ...when, summary: '' }), cal)[0].title).toBe('(No title)');
+  });
+});
+
+describe('descriptions', () => {
+  it('come through as plain-text notes', () => {
+    const [e] = toShown(ev({ start: { date: '2026-11-10' }, end: { date: '2026-11-11' }, description: '<b>Bring</b> slides<br>&amp; laptop' }), cal);
+    expect(e.notes).toBe('Bring slides & laptop');
+    expect(plainText('   ')).toBeUndefined();
+    expect(plainText('x'.repeat(400))!.length).toBe(280);
   });
 });
 

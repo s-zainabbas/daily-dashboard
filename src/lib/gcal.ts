@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from 'react';
-import { addDays, today } from './date';
+import { addDays, diffDays, today } from './date';
 import { CALENDAR_SCOPE, currentToken, googleConfigured, requestToken, tokenHasScope } from './google/auth';
 import { CalendarError, listCalendars, listEvents, REMINDER_PREFIX, toShown, type GCalendar, type ShownEvent } from './google/calendar';
 import { useStore } from './store';
-import type { CalEvent, JobApplication } from './types';
+import type { CalEvent, DateKey, JobApplication } from './types';
 import { interviewEvents } from './jobs';
 
 /**
@@ -72,8 +72,28 @@ export function useGcal(): GcalView {
 
 const shownIds = (v: GcalView) => new Set(v.chosen ?? v.calendars.filter((c) => c.selected || c.primary).map((c) => c.id));
 
+/** The days loaded from Google: a week back to two months ahead, widened to whatever you browse to. */
+const defaultRange = () => ({ from: addDays(today(), -7), to: addDays(today(), 60) });
+let range = defaultRange();
+// Don't let browsing far away grow one fetch without limit: keep at most ~14 months loaded.
+const MAX_SPAN_DAYS = 430;
+
+/**
+ * Make sure Google events for these days are loaded (calendar and planner views call this as you
+ * move between months). Does nothing when they already are.
+ */
+export function ensureCalendarRange(from: DateKey, to: DateKey): Promise<void> {
+  if (!view.enabled || (from >= range.from && to <= range.to)) return Promise.resolve();
+  const wider = { from: from < range.from ? from : range.from, to: to > range.to ? to : range.to };
+  // Jumped far away: load just that stretch (plus the default window) instead of everything in between.
+  range = diffDays(wider.from, wider.to) > MAX_SPAN_DAYS ? { from: from < today() ? from : addDays(today(), -7), to: to > today() ? to : addDays(today(), 60) } : wider;
+  if (diffDays(range.from, range.to) > MAX_SPAN_DAYS) range = { from, to };
+  return refreshCalendar(true);
+}
+
 /** Fetch calendars and events. Quietly does nothing without a token that has calendar access. */
 let inflight: Promise<void> | null = null;
+let again = false;
 export function refreshCalendar(force = false): Promise<void> {
   if (!view.enabled) return Promise.resolve();
   if (!force && view.fetchedAt && Date.now() - view.fetchedAt < STALE_MS && view.status === 'ok') return Promise.resolve();
@@ -81,20 +101,29 @@ export function refreshCalendar(force = false): Promise<void> {
     set({ status: 'needs-auth' });
     return Promise.resolve();
   }
-  return (inflight ??= run().finally(() => (inflight = null)));
+  // A forced refresh while one is running (e.g. you moved to another month) runs once more after it.
+  if (inflight) {
+    if (force) again = true;
+    return inflight;
+  }
+  return (inflight = run().finally(() => {
+    inflight = null;
+    if (again) {
+      again = false;
+      return refreshCalendar(true);
+    }
+  }));
 }
 
 async function run() {
   const token = currentToken()!;
+  const { from, to } = range;
   set({ status: 'loading', error: undefined, errorLink: undefined });
   try {
     const calendars = await listCalendars(token);
     const ids = shownIds({ ...view, calendars });
-    // Last week to two months ahead, so browsing nearby days in Schedule works.
-    const from = addDays(today(), -7);
-    const to = addDays(today(), 60);
     const lists = await Promise.all(
-      calendars.filter((c) => ids.has(c.id)).map(async (c) => (await listEvents(token, c.id, from, to))
+      calendars.filter((c) => ids.has(c.id)).map(async (c) => (await listEvents(token, c.id, from, addDays(to, 1)))
           // The dashboard's own phone reminders are already shown as your tasks and events.
           .filter((e) => !e.id.startsWith(REMINDER_PREFIX))
           .flatMap((e) => toShown(e, c))),

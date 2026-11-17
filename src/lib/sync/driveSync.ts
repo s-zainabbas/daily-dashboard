@@ -48,11 +48,15 @@ export function initDriveSync() {
   onLocalChange(() => engine.localChanged());
   window.addEventListener('online', () => engine.wake());
   window.addEventListener('offline', () => engine.getView().account && engine.wake());
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && engine.wake());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    engine.wake();
+    armRenewal(); // back after a while: the next tap renews the sign-in straight away
+  });
   // Look for changes from other devices every few minutes while the dashboard is open.
   setInterval(() => document.visibilityState === 'visible' && engine.wake(), 5 * 60_000);
   engine.start();
-  // Stay signed in: renew the hour-long Google sign-in on your next click before it runs out.
+  // Stay signed in: renew the hour-long Google sign-in on your next tap, before or after it runs out.
   setInterval(armRenewal, 60_000);
   armRenewal();
 }
@@ -87,7 +91,7 @@ export function connectGoogle(mode: 'connect' | 'switch' | 'reconnect' = 'connec
 /** "Sync now": gets a fresh sign-in first if the old one expired. Call from a click. */
 export function syncNow(): Promise<void> {
   if (!engine) return Promise.resolve();
-  if (!currentToken()) return connectGoogle('reconnect');
+  if (!currentToken()) return renewal ?? connectGoogle('reconnect');
   return engine.syncNow();
 }
 
@@ -130,29 +134,43 @@ export function setStaySignedIn(on: boolean) {
 }
 
 /**
- * Google only hands out a new token from a click or key press, so when the current one is close
- * to running out, wait for your next one and renew then. Google's window opens and closes by
- * itself because you've already said yes; if anything goes wrong it stays quiet and tries later.
+ * Google only hands out a new token from a tap, click or key press, and a browser-only app (no
+ * server) can't renew it in the background. So when the hour-long sign-in is about to run out, or
+ * already has, the next tap or key press anywhere on the dashboard renews it. Google's window opens
+ * and closes by itself because you already said yes, then sync carries on.
+ *
+ * Listens for `click`, not `pointerdown`: on phones a touch only counts as a tap (and may open
+ * Google's window) once the finger lifts, so renewing on touch-down was silently blocked there.
  */
+let renewal: Promise<void> | null = null;
+
 function armRenewal() {
   if (!engine || armed || !staySignedIn() || Date.now() < quietUntil) return;
   const account = engine.getView().account;
   const expires = tokenExpiresAt();
   if (!account || (expires && expires - Date.now() > 5 * 60_000)) return;
   armed = true;
-  const onGesture = () => {
-    window.removeEventListener('pointerdown', onGesture, true);
+  const disarm = () => {
+    window.removeEventListener('click', onGesture, true);
     window.removeEventListener('keydown', onGesture, true);
     armed = false;
-    // Don't step on a sign-in you're already doing, or re-ask in a loop if Google said no.
+  };
+  function onGesture(e: Event) {
+    // Buttons that sign in themselves (Sync now, Reconnect…) shouldn't open a second window.
+    if ((e.target as Element | null)?.closest?.('[data-google-signin]')) return;
+    // Modifier keys alone aren't a key press browsers let open a window.
+    if (e instanceof KeyboardEvent && ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) return;
+    disarm();
     if (currentToken() && (tokenExpiresAt() ?? 0) - Date.now() > 5 * 60_000) return;
-    requestToken('', account.email)
-      .then(() => engine.resumed())
+    renewal = requestToken('', account!.email)
+      .then(() => engine!.resumed())
       .then(() => refreshCalendar(true))
       .catch(() => {
+        // Don't re-ask in a loop if Google said no; the Sync button still works any time.
         quietUntil = Date.now() + 10 * 60_000;
-      });
-  };
-  window.addEventListener('pointerdown', onGesture, true);
+      })
+      .finally(() => (renewal = null));
+  }
+  window.addEventListener('click', onGesture, true);
   window.addEventListener('keydown', onGesture, true);
 }
